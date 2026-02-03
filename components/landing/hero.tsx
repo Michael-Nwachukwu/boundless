@@ -2,6 +2,7 @@
 
 import { ArrowRight, Zap, Shield, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 interface HeroProps {
   onConnectWallet: () => void
@@ -21,7 +22,7 @@ export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
           `,
           backgroundSize: '50px 50px',
         }} />
-        
+
         {/* Gradient Orbs */}
         <div className="absolute top-20 left-10 w-72 h-72 bg-orange-500/20 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
@@ -54,13 +55,61 @@ export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 mb-12">
-            <Button
-              onClick={onConnectWallet}
-              className="h-12 px-8 bg-orange-500 hover:bg-orange-600 text-white text-base font-semibold flex items-center justify-center gap-2"
-            >
-              Connect Wallet
-              <ArrowRight className="w-4 h-4" />
-            </Button>
+            <ConnectButton.Custom>
+              {({
+                account,
+                chain,
+                openAccountModal,
+                openChainModal,
+                openConnectModal,
+                authenticationStatus,
+                mounted,
+              }) => {
+                const ready = mounted && authenticationStatus !== 'loading';
+                const connected =
+                  ready &&
+                  account &&
+                  chain &&
+                  (!authenticationStatus ||
+                    authenticationStatus === 'authenticated');
+
+                return (
+                  <div
+                    {...(!ready && {
+                      'aria-hidden': true,
+                      'style': {
+                        opacity: 0,
+                        pointerEvents: 'none',
+                        userSelect: 'none',
+                      },
+                    })}
+                  >
+                    {(() => {
+                      if (!connected) {
+                        return (
+                          <Button
+                            onClick={openConnectModal}
+                            className="h-12 px-8 bg-orange-500 hover:bg-orange-600 text-white text-base font-semibold flex items-center justify-center gap-2"
+                          >
+                            Connect Wallet
+                            <ArrowRight className="w-4 h-4" />
+                          </Button>
+                        );
+                      }
+                      return (
+                        <Button
+                          onClick={onConnectWallet} // Navigate to dashboard
+                          className="h-12 px-8 bg-orange-500 hover:bg-orange-600 text-white text-base font-semibold flex items-center justify-center gap-2"
+                        >
+                          Go to Dashboard
+                          <ArrowRight className="w-4 h-4" />
+                        </Button>
+                      );
+                    })()}
+                  </div>
+                );
+              }}
+            </ConnectButton.Custom>
             <Button
               onClick={onViewDemo}
               variant="outline"

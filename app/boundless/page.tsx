@@ -6,8 +6,8 @@ import { Wallet, LogOut, RefreshCw, ChevronDown, History, Settings as SettingsIc
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Hero } from "@/components/landing/hero"
-import { WalletConnectionModal } from "@/components/modals/wallet-connection"
 import { UnifiedBalanceCard } from "@/components/dashboard/unified-balance-card"
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { AssetTable } from "@/components/dashboard/asset-table"
 import { PullFlow } from "@/components/flows/pull-flow"
 import { RefuelFlow } from "@/components/flows/refuel-flow"
@@ -16,57 +16,132 @@ import { useWeb3Provider } from "@/lib/hooks/use-web3"
 import type { Balance } from "@/lib/types/defi"
 
 export default function BoundlessApp() {
-  const { connectedWallets, unifiedBalance, isConnecting, addWallet, removeWallet, refreshBalances } =
+  const { connectedWallets, unifiedBalance, isConnecting, isConnected, addWallet, removeWallet, refreshBalances } =
     useWeb3Provider()
 
-  const [showWalletModal, setShowWalletModal] = useState(false)
+  // Derived state for view
+  const showHero = !isConnected && connectedWallets.length === 0
+
   const [activeTab, setActiveTab] = useState("overview")
-  const [showHero, setShowHero] = useState(connectedWallets.length === 0)
   const [assetFilter, setAssetFilter] = useState<number | null>(null)
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set())
 
-  // Mock connected wallet for testing
-  const mockWallets = showHero ? [] : [
-    { address: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122", balance: 2.5, chain: "ethereum" },
-  ]
+  // Use real connected wallets
+  const walletsToDisplay = connectedWallets
   const mockBalance = {
     totalUsd: 4000,
     balances: [
       {
-        asset: { symbol: "ETH", address: "0x0000000000000000000000000000000000000000" },
-        amount: 1.5,
+        asset: {
+          symbol: "ETH",
+          address: "0x0000000000000000000000000000000000000000",
+          name: "Ethereum",
+          chain: "ethereum",
+          decimals: 18
+        },
+        amount: "1.5",
         usdValue: 3000,
         chain: "ethereum",
         wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
       },
       {
-        asset: { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
-        amount: 1000,
+        asset: {
+          symbol: "USDC",
+          address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          name: "USD Coin",
+          chain: "polygon",
+          decimals: 6
+        },
+        amount: "1000",
         usdValue: 1000,
         chain: "polygon",
         wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
       },
     ],
     byWallet: {
-      "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122": 4000,
+      "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122": {
+        totalUsd: 4000,
+        assets: [
+          {
+            asset: {
+              symbol: "ETH",
+              address: "0x0000000000000000000000000000000000000000",
+              name: "Ethereum",
+              chain: "ethereum",
+              decimals: 18
+            },
+            amount: "1.5",
+            usdValue: 3000,
+            chain: "ethereum",
+            wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
+          },
+          {
+            asset: {
+              symbol: "USDC",
+              address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+              name: "USD Coin",
+              chain: "polygon",
+              decimals: 6
+            },
+            amount: "1000",
+            usdValue: 1000,
+            chain: "polygon",
+            wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
+          }
+        ]
+      },
     },
     byChain: {
-      ethereum: 3000,
-      polygon: 1000,
+      ethereum: {
+        totalUsd: 3000,
+        assets: [
+          {
+            asset: {
+              symbol: "ETH",
+              address: "0x0000000000000000000000000000000000000000",
+              name: "Ethereum",
+              chain: "ethereum",
+              decimals: 18
+            },
+            amount: "1.5",
+            usdValue: 3000,
+            chain: "ethereum",
+            wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
+          }
+        ]
+      },
+      polygon: {
+        totalUsd: 1000,
+        assets: [
+          {
+            asset: {
+              symbol: "USDC",
+              address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+              name: "USD Coin",
+              chain: "polygon",
+              decimals: 6
+            },
+            amount: "1000",
+            usdValue: 1000,
+            chain: "polygon",
+            wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
+          }
+        ]
+      },
     },
   }
 
   if (showHero) {
     return (
       <Hero
-        onConnectWallet={() => setShowHero(false)}
-        onViewDemo={() => setShowHero(false)}
+        onConnectWallet={() => { /* Handled by ConnectButton inside Hero */ }}
+        onViewDemo={() => { /* Add demo logic later if needed */ }}
       />
     )
   }
 
   const allAssets = mockBalance?.balances ?? []
-  const filteredAssets = assetFilter 
+  const filteredAssets = assetFilter
     ? allAssets.filter(asset => asset.usdValue < assetFilter)
     : allAssets
 
@@ -114,45 +189,7 @@ export default function BoundlessApp() {
             </Button>
 
             <div className="relative group">
-              <Button
-                variant="outline"
-                className="border-neutral-700 text-neutral-300 hover:bg-neutral-800 flex items-center gap-2 bg-transparent"
-              >
-                <Wallet className="w-4 h-4" />
-                <span>{mockWallets.length} Wallet{mockWallets.length !== 1 ? "s" : ""}</span>
-                <ChevronDown className="w-4 h-4" />
-              </Button>
-
-              {/* Wallet Dropdown */}
-              <div className="absolute right-0 mt-2 w-64 bg-neutral-900 border border-neutral-700 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
-                  {mockWallets.map((wallet) => (
-                    <div
-                      key={wallet.address}
-                      className="flex items-center justify-between p-2 rounded hover:bg-neutral-800 text-sm"
-                    >
-                      <div className="font-mono text-neutral-300 truncate">{wallet.address.slice(0, 12)}...</div>
-                      <button
-                        onClick={() => removeWallet(wallet.address)}
-                        className="text-neutral-500 hover:text-red-400 transition-colors"
-                      >
-                        <LogOut className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-neutral-700 p-3">
-                  <Button
-                    onClick={() => setShowWalletModal(true)}
-                    size="sm"
-                    variant="outline"
-                    className="w-full border-neutral-700 text-neutral-300 hover:bg-neutral-800 text-xs"
-                  >
-                    <Wallet className="w-3 h-3 mr-1" />
-                    Manage Wallets
-                  </Button>
-                </div>
-              </div>
+              <ConnectButton showBalance={false} accountStatus="address" chainStatus="icon" />
             </div>
           </div>
         </div>
@@ -224,8 +261,8 @@ export default function BoundlessApp() {
                     )}
                   </div>
                 </div>
-                <AssetTable 
-                  assets={filteredAssets} 
+                <AssetTable
+                  assets={filteredAssets}
                   isLoading={isConnecting}
                   selectedAssets={selectedAssets}
                   onSelectedAssetsChange={setSelectedAssets}
@@ -251,15 +288,7 @@ export default function BoundlessApp() {
         </div>
       </div>
 
-      {/* Wallet Modal */}
-      <WalletConnectionModal
-        isOpen={showWalletModal}
-        onClose={() => setShowWalletModal(false)}
-        connectedWallets={mockWallets}
-        onAddWallet={async () => console.log("[v0] Mock wallet added")}
-        onRemoveWallet={() => console.log("[v0] Mock wallet removed")}
-        isLoading={isConnecting}
-      />
+
     </div>
   )
 }
