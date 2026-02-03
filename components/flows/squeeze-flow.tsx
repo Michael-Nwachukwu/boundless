@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 import { X, ArrowRight, ChevronDown, Zap, AlertCircle } from 'lucide-react'
+import { useAccount } from 'wagmi'
 import { Button } from '@/components/ui/button'
+import { EnsAddressInput } from '@/components/ui/ens-address-input'
 import { formatCurrency } from '@/lib/utils'
 import type { Balance } from '@/lib/types/defi'
 
@@ -31,16 +33,19 @@ interface SqueezeFlowProps {
 }
 
 export function SqueezeFlow({ selectedAssets, totalUsd, onClose }: SqueezeFlowProps) {
+    const { address: connectedAddress } = useAccount()
     const [step, setStep] = useState<'review' | 'destination' | 'confirm' | 'executing'>('review')
     const [destinationChain, setDestinationChain] = useState(CHAIN_OPTIONS[0])
     const [targetToken, setTargetToken] = useState(TOKEN_OPTIONS[0])
     const [showChainDropdown, setShowChainDropdown] = useState(false)
     const [showTokenDropdown, setShowTokenDropdown] = useState(false)
+    const [destinationAddress, setDestinationAddress] = useState('')
 
     const handleContinue = () => {
         if (step === 'review') {
             setStep('destination')
         } else if (step === 'destination') {
+            if (!destinationAddress) return
             setStep('confirm')
         } else if (step === 'confirm') {
             setStep('executing')
@@ -194,6 +199,17 @@ export function SqueezeFlow({ selectedAssets, totalUsd, onClose }: SqueezeFlowPr
                                 </div>
                             </div>
 
+                            {/* Recipient Address */}
+                            <div className="space-y-3">
+                                <h3 className="text-sm font-medium text-neutral-400 uppercase tracking-wide">Recipient Address</h3>
+                                <EnsAddressInput
+                                    value={destinationAddress}
+                                    onChange={setDestinationAddress}
+                                    placeholder="Enter address or ENS name"
+                                    defaultAddress={connectedAddress}
+                                />
+                            </div>
+
                             {/* Summary */}
                             <div className="flex items-center justify-center gap-3 py-4">
                                 <div className="text-center">
@@ -232,6 +248,10 @@ export function SqueezeFlow({ selectedAssets, totalUsd, onClose }: SqueezeFlowPr
                                     <div className="flex justify-between">
                                         <span className="text-neutral-400">Target Token</span>
                                         <span className="font-medium text-white">{targetToken.symbol}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-neutral-400">Recipient</span>
+                                        <span className="font-medium text-white truncate max-w-[200px]" title={destinationAddress}>{destinationAddress}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-neutral-400">Estimated Gas</span>

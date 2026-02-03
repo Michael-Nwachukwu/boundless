@@ -2,9 +2,11 @@
 
 import { useState } from "react"
 import { ArrowRight, ChevronDown, Info } from "lucide-react"
+import { useAccount } from 'wagmi'
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { EnsAddressInput } from "@/components/ui/ens-address-input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   DropdownMenu,
@@ -23,6 +25,7 @@ const ASSETS: Asset[] = [
 const CHAINS = ["ethereum", "polygon", "arbitrum", "optimism", "base"]
 
 export function PullFlow() {
+  const { address: connectedAddress } = useAccount()
   const [step, setStep] = useState<"config" | "preview" | "confirm">("config")
   const [amount, setAmount] = useState("")
   const [destinationAsset, setDestinationAsset] = useState<Asset | null>(ASSETS[0])
@@ -80,7 +83,7 @@ export function PullFlow() {
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="bg-neutral-800 border-neutral-700 text-white text-lg"
+              className="bg-neutral-800 border-neutral-700 text-white text-lg hover:text-white"
             />
             <p className="text-xs text-neutral-500 mt-2">Available: 10.5 ETH</p>
           </div>
@@ -90,7 +93,7 @@ export function PullFlow() {
               <label className="text-sm font-semibold text-white mb-2 block">Destination Asset</label>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="w-full border-neutral-700 justify-between bg-transparent">
+                  <Button variant="outline" className="w-full border-neutral-700 justify-between bg-transparent text-white">
                     {destinationAsset?.symbol || "Select"}
                     <ChevronDown className="w-4 h-4" />
                   </Button>
@@ -113,7 +116,7 @@ export function PullFlow() {
               <label className="text-sm font-semibold text-white mb-2 block">Destination Chain</label>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="w-full border-neutral-700 justify-between bg-transparent">
+                  <Button variant="outline" className="w-full border-neutral-700 justify-between bg-transparent text-white">
                     {destinationChain}
                     <ChevronDown className="w-4 h-4" />
                   </Button>
@@ -135,11 +138,11 @@ export function PullFlow() {
 
           <div>
             <label className="text-sm font-semibold text-white mb-2 block">Destination Address</label>
-            <Input
-              placeholder="0x..."
+            <EnsAddressInput
+              placeholder="0x... or name.eth"
               value={destinationAddress}
-              onChange={(e) => setDestinationAddress(e.target.value)}
-              className="bg-neutral-800 border-neutral-700 text-white"
+              onChange={setDestinationAddress}
+              defaultAddress={connectedAddress}
             />
           </div>
 
@@ -232,9 +235,8 @@ export function PullFlow() {
             <div className="space-y-2">
               {mockExecutionSteps.map((executionStep, idx) => (
                 <div key={executionStep.id} className="flex items-start gap-3 p-3 rounded border border-neutral-700 bg-neutral-800/30">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                    executionStep.status === "completed" ? "bg-green-500/20 text-green-400" : "bg-neutral-700 text-neutral-400"
-                  }`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${executionStep.status === "completed" ? "bg-green-500/20 text-green-400" : "bg-neutral-700 text-neutral-400"
+                    }`}>
                     {idx + 1}
                   </div>
                   <div className="flex-1 min-w-0">
