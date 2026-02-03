@@ -13,11 +13,16 @@ import { PullFlow } from "@/components/flows/pull-flow"
 import { RefuelFlow } from "@/components/flows/refuel-flow"
 import { PositionsFlow } from "@/components/flows/positions-flow"
 import { useWeb3Provider } from "@/lib/hooks/use-web3"
+import { useUnifiedBalance } from "@/lib/hooks/use-unified-balance"
 import type { Balance } from "@/lib/types/defi"
 
 export default function BoundlessApp() {
-  const { connectedWallets, unifiedBalance, isConnecting, isConnected, addWallet, removeWallet, refreshBalances } =
+  const { connectedWallets, isConnecting, isConnected, primaryAddress, addWallet, removeWallet } =
     useWeb3Provider()
+
+  // Fetch real portfolio data
+  const { data: unifiedBalance, isLoading: isBalanceLoading, refetch: refetchBalance } = useUnifiedBalance(primaryAddress)
+  const isGlobalLoading = isConnecting || isBalanceLoading
 
   // Derived state for view
   const showHero = !isConnected && connectedWallets.length === 0
@@ -28,107 +33,13 @@ export default function BoundlessApp() {
 
   // Use real connected wallets
   const walletsToDisplay = connectedWallets
-  const mockBalance = {
-    totalUsd: 4000,
-    balances: [
-      {
-        asset: {
-          symbol: "ETH",
-          address: "0x0000000000000000000000000000000000000000",
-          name: "Ethereum",
-          chain: "ethereum",
-          decimals: 18
-        },
-        amount: "1.5",
-        usdValue: 3000,
-        chain: "ethereum",
-        wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
-      },
-      {
-        asset: {
-          symbol: "USDC",
-          address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-          name: "USD Coin",
-          chain: "polygon",
-          decimals: 6
-        },
-        amount: "1000",
-        usdValue: 1000,
-        chain: "polygon",
-        wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
-      },
-    ],
-    byWallet: {
-      "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122": {
-        totalUsd: 4000,
-        assets: [
-          {
-            asset: {
-              symbol: "ETH",
-              address: "0x0000000000000000000000000000000000000000",
-              name: "Ethereum",
-              chain: "ethereum",
-              decimals: 18
-            },
-            amount: "1.5",
-            usdValue: 3000,
-            chain: "ethereum",
-            wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
-          },
-          {
-            asset: {
-              symbol: "USDC",
-              address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-              name: "USD Coin",
-              chain: "polygon",
-              decimals: 6
-            },
-            amount: "1000",
-            usdValue: 1000,
-            chain: "polygon",
-            wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
-          }
-        ]
-      },
-    },
-    byChain: {
-      ethereum: {
-        totalUsd: 3000,
-        assets: [
-          {
-            asset: {
-              symbol: "ETH",
-              address: "0x0000000000000000000000000000000000000000",
-              name: "Ethereum",
-              chain: "ethereum",
-              decimals: 18
-            },
-            amount: "1.5",
-            usdValue: 3000,
-            chain: "ethereum",
-            wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
-          }
-        ]
-      },
-      polygon: {
-        totalUsd: 1000,
-        assets: [
-          {
-            asset: {
-              symbol: "USDC",
-              address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-              name: "USD Coin",
-              chain: "polygon",
-              decimals: 6
-            },
-            amount: "1000",
-            usdValue: 1000,
-            chain: "polygon",
-            wallet: "0x742d35Cc6634C0532925a3b844Bc822e7Bb74122",
-          }
-        ]
-      },
-    },
+
+  // Use real balance or default empty structure
+  const balanceToDisplay = unifiedBalance || {
+    totalUsd: 0,
+    balances: [],
+    byWallet: {},
+    byChain: {}
   }
 
   if (showHero) {
@@ -140,7 +51,7 @@ export default function BoundlessApp() {
     )
   }
 
-  const allAssets = mockBalance?.balances ?? []
+  const allAssets = balanceToDisplay?.balances ?? []
   const filteredAssets = assetFilter
     ? allAssets.filter(asset => asset.usdValue < assetFilter)
     : allAssets
@@ -179,13 +90,13 @@ export default function BoundlessApp() {
             </Link>
 
             <Button
-              onClick={refreshBalances}
-              disabled={isConnecting}
+              onClick={() => refetchBalance()}
+              disabled={isGlobalLoading}
               variant="ghost"
               size="icon"
               className="text-neutral-400 hover:text-orange-500 hover:bg-neutral-800"
             >
-              <RefreshCw className={`w-4 h-4 ${isConnecting ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-4 h-4 ${isGlobalLoading ? "animate-spin" : ""}`} />
             </Button>
 
             <div className="relative group">
@@ -199,7 +110,7 @@ export default function BoundlessApp() {
       <div className="flex-1 overflow-auto">
         <div className="p-6 space-y-6 max-w-6xl mx-auto w-full">
           {/* Balance Card */}
-          <UnifiedBalanceCard balance={mockBalance} isLoading={isConnecting} />
+          <UnifiedBalanceCard balance={balanceToDisplay} isLoading={isGlobalLoading} />
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -263,7 +174,7 @@ export default function BoundlessApp() {
                 </div>
                 <AssetTable
                   assets={filteredAssets}
-                  isLoading={isConnecting}
+                  isLoading={isGlobalLoading}
                   selectedAssets={selectedAssets}
                   onSelectedAssetsChange={setSelectedAssets}
                 />

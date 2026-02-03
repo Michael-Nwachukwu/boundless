@@ -44,85 +44,25 @@ export function useWeb3Provider() {
   const { address, isConnected, isConnecting: wagmiConnecting } = useAccount()
   const { disconnect } = useDisconnect()
 
-  // Track multiple wallet addresses for multi-wallet support
-  const [connectedWallets, setConnectedWallets] = useState<Wallet[]>([])
-  const [unifiedBalance, setUnifiedBalance] = useState<UnifiedBalance | null>(null)
-  const [isConnecting, setIsConnecting] = useState(false)
-
-  // Sync connected wallet when wagmi state changes
-  useEffect(() => {
-    if (address && isConnected) {
-      setConnectedWallets(prev => {
-        const exists = prev.some(w => w.address.toLowerCase() === address.toLowerCase())
-        if (!exists) {
-          return [...prev, {
-            address,
-            chainId: 1,
-            balance: '0',
-            isConnected: true,
-            label: `Wallet ${address.slice(0, 6)}...`,
-          }]
-        }
-        return prev
-      })
-    }
-  }, [address, isConnected])
-
-  const addWallet = useCallback(async (newAddress: string) => {
-    setIsConnecting(true)
-    try {
-      // Add wallet to our tracked list
-      setConnectedWallets(prev => {
-        const exists = prev.some(w => w.address.toLowerCase() === newAddress.toLowerCase())
-        if (!exists) {
-          return [...prev, {
-            address: newAddress,
-            chainId: 1,
-            balance: '0',
-            isConnected: true,
-            label: `Wallet ${newAddress.slice(0, 6)}...`,
-          }]
-        }
-        return prev
-      })
-    } finally {
-      setIsConnecting(false)
-    }
-  }, [])
-
-  const removeWallet = useCallback((addressToRemove: string) => {
-    setConnectedWallets(prev =>
-      prev.filter(w => w.address.toLowerCase() !== addressToRemove.toLowerCase())
-    )
-
-    // If removing the currently connected wallet, disconnect
-    if (address?.toLowerCase() === addressToRemove.toLowerCase()) {
-      disconnect()
-    }
-  }, [address, disconnect])
-
-  const refreshBalances = useCallback(async () => {
-    if (connectedWallets.length === 0) return
-
-    setIsConnecting(true)
-    try {
-      // TODO: Implement real balance fetching via Zerion API
-      // This will be replaced in Phase 2
-      await new Promise(resolve => setTimeout(resolve, 500))
-    } finally {
-      setIsConnecting(false)
-    }
-  }, [connectedWallets])
+  // Simplified wallet object for the UI
+  const primaryWallet: Wallet | null = address && isConnected ? {
+    address,
+    chainId: 1, // We could get this from useNetwork if needed
+    balance: '0', // Will be fetched by unified balance hook
+    isConnected: true,
+    label: `Wallet ${address.slice(0, 6)}...`,
+  } : null
 
   return {
-    connectedWallets,
-    unifiedBalance,
-    isConnecting: isConnecting || wagmiConnecting,
+    // Single wallet mode: 'connectedWallets' is just an array of one
+    connectedWallets: primaryWallet ? [primaryWallet] : [],
+    isConnecting: wagmiConnecting,
     isConnected,
     primaryAddress: address,
-    addWallet,
-    removeWallet,
-    refreshBalances,
+    // No-op functions to keep interface compatible for now, or we can remove them
+    addWallet: async () => { },
+    removeWallet: () => disconnect(),
+    refreshBalances: async () => { }, // React Query handles this
     disconnect,
   }
 }
