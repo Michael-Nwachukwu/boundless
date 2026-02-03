@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { getWalletPortfolio } from '@/lib/api/zerion'
-import { getAllSupportedTokens, SUPPORTED_CHAINS } from '@/lib/api/lifi-tokens'
+import { SUPPORTED_CHAINS } from '@/lib/api/lifi-tokens'
 import type { UnifiedBalance, Balance } from '@/lib/types/defi'
 
 export function useUnifiedBalance(address?: string) {
@@ -11,9 +11,7 @@ export function useUnifiedBalance(address?: string) {
         queryFn: async () => {
             if (!address) return null
 
-            // Ensure token cache is populated for filtering
-            await getAllSupportedTokens()
-
+            // Fetch portfolio (LI.FI filtering happens server-side)
             const portfolio = await getWalletPortfolio(address)
             console.log('[useUnifiedBalance] Portfolio response:', portfolio)
 

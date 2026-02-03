@@ -3,12 +3,15 @@ import axios from 'axios'
 const LIFI_API = 'https://li.quest/v1'
 
 // Supported chains for Boundless
+// Keys match Zerion API chain names, values are chain IDs for LI.FI
 export const SUPPORTED_CHAINS = {
     ethereum: 1,
     optimism: 10,
-    lisk: 1135,
     base: 8453,
     arbitrum: 42161,
+    'binance-smart-chain': 56,
+    scroll: 534352,
+    'zksync-era': 324,
     // monad: TBD when mainnet launches
 } as const
 

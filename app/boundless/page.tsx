@@ -46,7 +46,7 @@ export default function BoundlessApp() {
     return (
       <Hero
         onConnectWallet={() => { /* Handled by ConnectButton inside Hero */ }}
-        onViewDemo={() => { /* Add demo logic later if needed */ }}
+        onViewDemo={() => { /* Add demo logic later */ }}
       />
     )
   }
@@ -62,8 +62,7 @@ export default function BoundlessApp() {
       <header className="border-b border-neutral-700 bg-neutral-900/50 backdrop-blur-sm">
         <div className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto w-full">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-sm font-bold">
-              B
+            <div className="w-9 h-9 rounded-md bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-sm font-bold">
             </div>
             <h1 className="text-xl font-bold tracking-wider">BOUNDLESS</h1>
           </div>
