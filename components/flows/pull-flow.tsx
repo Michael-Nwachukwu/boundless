@@ -73,19 +73,20 @@ export function PullFlow() {
 
   // Calculate available total (excluding destination chain)
   const availableForPull = useMemo(() => {
+    if (!balances || balances.length === 0) return 0
     return balances
-      .filter(b => b.chain !== destinationChain.id)
-      .reduce((sum: any, b: { usdValue: any }) => sum + b.usdValue, 0)
+      .filter((b: Balance) => b.chain !== destinationChain.id)
+      .reduce((sum: number, b: Balance) => sum + b.usdValue, 0)
   }, [balances, destinationChain])
 
   // Auto-select assets to meet requested amount
   const autoSelectedAssets = useMemo(() => {
-    if (requestedAmount <= 0) return []
+    if (requestedAmount <= 0 || !balances || balances.length === 0) return []
 
     // Sort by value descending (use largest assets first)
     const sortedBalances = [...balances]
-      .filter(b => b.chain !== destinationChain.id && b.usdValue > 0.01) // Exclude tiny balances
-      .sort((a, b) => b.usdValue - a.usdValue)
+      .filter((b: Balance) => b.chain !== destinationChain.id && b.usdValue > 0.01) // Exclude tiny balances
+      .sort((a: Balance, b: Balance) => b.usdValue - a.usdValue)
 
     const selected: Balance[] = []
     let accumulatedValue = 0

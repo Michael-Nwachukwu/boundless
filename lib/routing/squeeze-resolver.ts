@@ -101,19 +101,30 @@ export async function resolveSqueezeRoutes(request: SqueezeRequest): Promise<Squ
             }
 
             // Convert amount to wei/smallest unit
-            // Known stablecoin decimals (fallback for when Zerion doesn't provide decimals)
+            // IMPORTANT: Zerion sometimes reports incorrect decimals (e.g., USDC as 18 instead of 6)
+            // So we ALWAYS use known decimals for stablecoins, only falling back to Zerion for unknown tokens
             const knownDecimals: Record<string, number> = {
                 'USDC': 6,
+                'USDC.E': 6,
                 'USDT': 6,
                 'USDT0': 6,
                 'DAI': 18,
+                'FRAX': 18,
+                'LUSD': 18,
                 'ETH': 18,
                 'WETH': 18,
                 'BNB': 18,
                 'MATIC': 18,
+                'AVAX': 18,
             }
             const symbolUpper = asset.asset.symbol.toUpperCase()
-            const decimals = asset.asset.decimals || knownDecimals[symbolUpper] || 18
+
+            // Prioritize known decimals over Zerion's reported value
+            const decimals = knownDecimals[symbolUpper] ?? (
+                typeof asset.asset.decimals === 'number' && asset.asset.decimals > 0
+                    ? asset.asset.decimals
+                    : 18
+            )
 
             // Parse amount carefully to avoid precision issues
             const amountFloat = parseFloat(asset.amount)
@@ -123,7 +134,7 @@ export async function resolveSqueezeRoutes(request: SqueezeRequest): Promise<Squ
 
             console.log(`[Resolver] Fetching route for ${asset.asset.symbol} on ${asset.chain}`)
             console.log(`[Resolver] From: chainId=${fromChainId}, token=${fromTokenAddress}`)
-            console.log(`[Resolver] Amount: ${asset.amount} (${decimals} decimals) = ${amountInSmallestUnit} smallest units`)
+            console.log(`[Resolver] Amount: ${asset.amount} (Zerion decimals: ${asset.asset.decimals}, using: ${decimals}) = ${amountInSmallestUnit} smallest units`)
             console.log(`[Resolver] To: chainId=${request.destinationChainId}, token=${toTokenAddress}`)
 
             const lifiRoutes = await getOptimalRoutes({
