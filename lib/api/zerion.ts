@@ -98,3 +98,27 @@ export async function getWalletPositions(address: string) {
         throw error
     }
 }
+export async function getWalletChart(address: string, period: string = 'day') {
+    try {
+        console.log(`[Zerion] Fetching chart via API route for: ${address} (${period})`)
+
+        // Use our internal API route
+        const response = await fetch(`/api/portfolio/chart?address=${address}&period=${period}`)
+
+        if (response.status === 429) {
+            console.log('[Zerion] Chart rate limited - returning null')
+            return null
+        }
+
+        if (!response.ok) {
+            console.error('[Zerion] Chart API error:', response.status)
+            return null
+        }
+
+        const data = await response.json()
+        return data
+    } catch (error) {
+        console.error('Error fetching Zerion chart:', error)
+        return null
+    }
+}

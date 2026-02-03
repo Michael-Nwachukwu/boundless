@@ -1,12 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import Link from "next/link"
-import { Wallet, LogOut, RefreshCw, ChevronDown, History, Settings as SettingsIcon } from "lucide-react"
+import { Wallet, LogOut, RefreshCw, ChevronDown, History, Settings as SettingsIcon, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Hero } from "@/components/landing/hero"
-import { UnifiedBalanceCard } from "@/components/dashboard/unified-balance-card"
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { AssetTable } from "@/components/dashboard/asset-table"
 import { PullFlow } from "@/components/flows/pull-flow"
@@ -14,6 +13,9 @@ import { RefuelFlow } from "@/components/flows/refuel-flow"
 import { PositionsFlow } from "@/components/flows/positions-flow"
 import { useWeb3Provider } from "@/lib/hooks/use-web3"
 import { useUnifiedBalance } from "@/lib/hooks/use-unified-balance"
+import { WalletChart } from "@/components/dashboard/wallet-chart"
+import { SqueezeFlow } from "@/components/flows/squeeze-flow"
+import { formatCurrency } from "@/lib/utils"
 import type { Balance } from "@/lib/types/defi"
 
 export default function BoundlessApp() {
@@ -30,6 +32,7 @@ export default function BoundlessApp() {
   const [activeTab, setActiveTab] = useState("overview")
   const [assetFilter, setAssetFilter] = useState<number | null>(null)
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set())
+  const [showSqueezeFlow, setShowSqueezeFlow] = useState(false)
 
   // Use real connected wallets
   const walletsToDisplay = connectedWallets
@@ -41,6 +44,18 @@ export default function BoundlessApp() {
     byWallet: {},
     byChain: {}
   }
+
+  // Calculate selected assets data
+  const selectedAssetsData = useMemo(() => {
+    const allAssets = balanceToDisplay?.balances ?? []
+    return allAssets.filter(asset =>
+      selectedAssets.has(`${asset.asset.symbol}-${asset.chain}`)
+    )
+  }, [balanceToDisplay, selectedAssets])
+
+  const selectedTotalUsd = useMemo(() => {
+    return selectedAssetsData.reduce((sum, asset) => sum + (asset.usdValue || 0), 0)
+  }, [selectedAssetsData])
 
   if (showHero) {
     return (
@@ -56,8 +71,17 @@ export default function BoundlessApp() {
     ? allAssets.filter(asset => asset.usdValue < assetFilter)
     : allAssets
 
+  const handleSqueezeClick = () => {
+    setShowSqueezeFlow(true)
+  }
+
+  const handleSqueezeClose = () => {
+    setShowSqueezeFlow(false)
+    setSelectedAssets(new Set()) // Clear selection after closing
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-black text-white">
+    <div className="flex flex-col h-screen bg-black text-white relative">
       {/* Header */}
       <header className="border-b border-neutral-700 bg-neutral-900/50 backdrop-blur-sm">
         <div className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto w-full">
@@ -106,10 +130,12 @@ export default function BoundlessApp() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto pb-24">
         <div className="p-6 space-y-6 max-w-6xl mx-auto w-full">
-          {/* Balance Card */}
-          <UnifiedBalanceCard balance={balanceToDisplay} isLoading={isGlobalLoading} />
+          {/* Wallet Chart & Balance */}
+          <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-6">
+            <WalletChart address={primaryAddress || ''} />
+          </div>
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -198,7 +224,30 @@ export default function BoundlessApp() {
         </div>
       </div>
 
+      {/* Floating Squeeze Button - appears when assets are selected */}
+      {selectedAssets.size > 0 && activeTab === "overview" && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 duration-300">
+          <button
+            onClick={handleSqueezeClick}
+            className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold rounded-full shadow-2xl shadow-orange-500/30 transition-all hover:scale-105 active:scale-95"
+          >
+            <Zap className="w-5 h-5" />
+            <span>Squeeze {selectedAssets.size} asset{selectedAssets.size > 1 ? 's' : ''}</span>
+            <span className="px-2 py-0.5 bg-white/20 rounded-full text-sm">
+              {formatCurrency(selectedTotalUsd)}
+            </span>
+          </button>
+        </div>
+      )}
 
+      {/* Squeeze Flow Modal */}
+      {showSqueezeFlow && (
+        <SqueezeFlow
+          selectedAssets={selectedAssetsData}
+          totalUsd={selectedTotalUsd}
+          onClose={handleSqueezeClose}
+        />
+      )}
     </div>
   )
 }
