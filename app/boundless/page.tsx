@@ -85,10 +85,10 @@ export default function BoundlessApp() {
       {/* Header */}
       <header className="border-b border-neutral-700 bg-neutral-900/50 backdrop-blur-sm">
         <div className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto w-full">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-md bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-sm font-bold">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-8 rounded-md bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-sm font-bold">
             </div>
-            <h1 className="text-xl font-bold tracking-wider">BOUNDLESS</h1>
+            <h1 className="text-md font-bold tracking-wider">BOUNDLESS</h1>
           </div>
 
           <div className="flex items-center gap-4">
