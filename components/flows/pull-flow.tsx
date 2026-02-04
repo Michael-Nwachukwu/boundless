@@ -72,6 +72,7 @@ export function PullFlow() {
   const requestedAmount = parseFloat(amount) || 0
 
   // Calculate available total (excluding destination chain)
+  // Calculate available total (excluding destination chain)
   const availableForPull = useMemo(() => {
     if (!balances || balances.length === 0) return 0
     return balances
@@ -79,7 +80,7 @@ export function PullFlow() {
       .reduce((sum: number, b: Balance) => sum + b.usdValue, 0)
   }, [balances, destinationChain])
 
-  // Auto-select assets to meet requested amount
+  // Auto-select assets to meet requested amount, calculating partial amounts as needed
   const autoSelectedAssets = useMemo(() => {
     if (requestedAmount <= 0 || !balances || balances.length === 0) return []
 
@@ -89,12 +90,30 @@ export function PullFlow() {
       .sort((a: Balance, b: Balance) => b.usdValue - a.usdValue)
 
     const selected: Balance[] = []
-    let accumulatedValue = 0
+    let remainingAmount = requestedAmount
 
     for (const balance of sortedBalances) {
-      if (accumulatedValue >= requestedAmount) break
-      selected.push(balance)
-      accumulatedValue += balance.usdValue
+      if (remainingAmount <= 0) break
+
+      if (balance.usdValue <= remainingAmount) {
+        // Use the full balance of this asset
+        selected.push(balance)
+        remainingAmount -= balance.usdValue
+      } else {
+        // Use only a portion of this asset (partial amount)
+        // Calculate the fraction of the balance we need
+        const fractionNeeded = remainingAmount / balance.usdValue
+        const partialAmount = parseFloat(balance.amount) * fractionNeeded
+
+        // Create a modified Balance with the partial amount
+        const partialBalance: Balance = {
+          ...balance,
+          amount: partialAmount.toString(),
+          usdValue: remainingAmount, // Exactly what we need
+        }
+        selected.push(partialBalance)
+        remainingAmount = 0
+      }
     }
 
     return selected
