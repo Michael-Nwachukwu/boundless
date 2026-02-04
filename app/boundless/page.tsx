@@ -86,7 +86,7 @@ export default function BoundlessApp() {
       <header className="border-b border-neutral-700 bg-neutral-900/50 backdrop-blur-sm">
         <div className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto w-full">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-8 rounded-md bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-sm font-bold">
+            <div className="w-8 h-8 rounded-md bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-sm font-bold">
             </div>
             <h1 className="text-md font-bold tracking-wider">BOUNDLESS</h1>
           </div>
@@ -246,6 +246,7 @@ export default function BoundlessApp() {
           selectedAssets={selectedAssetsData}
           totalUsd={selectedTotalUsd}
           onClose={handleSqueezeClose}
+          onRefresh={() => refetchBalance()}
         />
       )}
     </div>

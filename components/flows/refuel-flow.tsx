@@ -30,7 +30,7 @@ export function RefuelFlow() {
   useLifiConfig()
 
   const { address: connectedAddress } = useAccount()
-  const { data: unifiedBalance, isLoading: isLoadingBalances } = useUnifiedBalance(connectedAddress)
+  const { data: unifiedBalance, isLoading: isLoadingBalances, refetch: refetchBalance } = useUnifiedBalance(connectedAddress)
 
   const balances = unifiedBalance?.balances ?? []
   const totalUsd = unifiedBalance?.totalUsd ?? 0
@@ -184,6 +184,12 @@ export function RefuelFlow() {
       })
 
       setStep('complete')
+
+      // Refresh portfolio balance after completion (even partial)
+      if (result.successfulRoutes > 0) {
+        // Delay slightly to allow blockchain state to update
+        setTimeout(() => refetchBalance(), 3000)
+      }
 
       if (result.failedRoutes > 0) {
         setExecutionError(

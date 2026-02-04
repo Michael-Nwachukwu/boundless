@@ -35,7 +35,7 @@ export function PullFlow() {
   useLifiConfig()
 
   const { address: connectedAddress } = useAccount()
-  const { data: unifiedBalance, isLoading: isLoadingBalances } = useUnifiedBalance(connectedAddress)
+  const { data: unifiedBalance, isLoading: isLoadingBalances, refetch: refetchBalance } = useUnifiedBalance(connectedAddress)
 
   // Extract balances and totalUsd from the unified balance data
   const balances = unifiedBalance?.balances ?? []
@@ -198,6 +198,12 @@ export function PullFlow() {
       })
 
       setStep('complete')
+
+      // Refresh portfolio balance after completion (even partial)
+      if (result.successfulRoutes > 0) {
+        // Delay slightly to allow blockchain state to update
+        setTimeout(() => refetchBalance(), 3000)
+      }
 
       if (result.failedRoutes > 0) {
         setExecutionError(

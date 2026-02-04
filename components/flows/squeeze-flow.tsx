@@ -33,9 +33,10 @@ interface SqueezeFlowProps {
     selectedAssets: Balance[]
     totalUsd: number
     onClose: () => void
+    onRefresh?: () => void  // Optional callback to refresh portfolio after completion
 }
 
-export function SqueezeFlow({ selectedAssets, totalUsd, onClose }: SqueezeFlowProps) {
+export function SqueezeFlow({ selectedAssets, totalUsd, onClose, onRefresh }: SqueezeFlowProps) {
     // Initialize LI.FI SDK with wagmi provider for transaction execution
     useLifiConfig()
 
@@ -135,6 +136,12 @@ export function SqueezeFlow({ selectedAssets, totalUsd, onClose }: SqueezeFlowPr
 
             // Always proceed to complete step (even with partial failures)
             setStep('complete')
+
+            // Refresh portfolio balance after completion (even partial)
+            if (result.successfulRoutes > 0 && onRefresh) {
+                // Delay slightly to allow blockchain state to update
+                setTimeout(() => onRefresh(), 3000)
+            }
 
             // Set error message only if there were failures
             if (result.failedRoutes > 0) {
