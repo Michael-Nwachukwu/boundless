@@ -84,9 +84,20 @@ export function PullFlow() {
   const autoSelectedAssets = useMemo(() => {
     if (requestedAmount <= 0 || !balances || balances.length === 0) return []
 
+    // aToken patterns (Aave vault tokens) - should never be used as source
+    const isAaveToken = (symbol: string) => {
+      const s = symbol.toLowerCase()
+      // Match patterns like aBasUSDC, aArbUSDC, aOptUSDC, aEthUSDC, etc.
+      return s.startsWith('abas') || s.startsWith('aarb') ||
+        s.startsWith('aopt') || s.startsWith('aeth') ||
+        s.startsWith('apol') || s.startsWith('aava') ||
+        /^a[a-z]{3,}[a-z0-9]+$/i.test(symbol)
+    }
+
     // Sort by value descending (use largest assets first)
     const sortedBalances = [...balances]
       .filter((b: Balance) => b.chain !== destinationChain.id && b.usdValue > 0.01) // Exclude tiny balances
+      .filter((b: Balance) => !isAaveToken(b.asset.symbol)) // Exclude aTokens
       .sort((a: Balance, b: Balance) => b.usdValue - a.usdValue)
 
     const selected: Balance[] = []
