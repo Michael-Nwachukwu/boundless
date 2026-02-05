@@ -4,7 +4,7 @@ import { useState, useMemo } from "react"
 import { ArrowLeft, Loader2, CheckCircle, AlertCircle } from "lucide-react"
 import { useAccount, useWriteContract, useSendTransaction, useSwitchChain, useConfig } from 'wagmi'
 import { getPublicClient } from '@wagmi/core'
-import { parseUnits, type Address, erc20Abi } from 'viem'
+import { parseUnits, type Address, erc20Abi, encodeFunctionData } from 'viem'
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,6 +13,7 @@ import { useUnifiedBalance } from "@/lib/hooks/use-unified-balance"
 import { resolveZapRoutes, type ZapResult } from "@/lib/routing/zap-resolver"
 import { executeRoute, getChainId } from "@/lib/api/lifi"
 import { formatCurrency } from "@/lib/utils"
+import { AAVE_POOL_ABI, AAVE_V3_POOL_ADDRESSES } from "@/lib/constants/aave"
 import type { Balance } from "@/lib/types/defi"
 
 // Helper to get chainId from chain name
@@ -55,12 +56,23 @@ export function ZapFlow({ targetMarket, onClose, onRefresh }: ZapFlowProps) {
     const [executionStatus, setExecutionStatus] = useState<Record<number, string>>({})
 
     // Prioritize assets: 1) Same chain + underlying token, 2) Same chain, 3) Cross-chain by USD value
+    // Also filter out the vault's own aToken (can't deposit aTokens back into the same vault)
     const availableAssets = useMemo(() => {
         const targetChainId = targetMarket.chainId
         const underlyingToken = targetMarket.underlying?.toLowerCase()
+        const aTokenAddress = targetMarket.aToken?.toLowerCase()
 
         return balances
             .filter(b => b.usdValue > 0.01)
+            // Exclude the vault's aToken - can't deposit aTokens back into the vault
+            .filter(b => {
+                const assetAddress = b.asset.address.toLowerCase()
+                if (aTokenAddress && assetAddress === aTokenAddress) {
+                    console.log(`[ZapFlow] Excluding aToken ${b.asset.symbol} from source assets`)
+                    return false
+                }
+                return true
+            })
             .sort((a, b) => {
                 const aChainId = getChainIdFromName(a.chain)
                 const bChainId = getChainIdFromName(b.chain)
@@ -79,10 +91,16 @@ export function ZapFlow({ targetMarket, onClose, onRefresh }: ZapFlowProps) {
                 if (aIsSameChain && !bIsSameChain) return -1
                 if (!aIsSameChain && bIsSameChain) return 1
 
-                // Priority 3: By USD value (highest first)
+                // Priority 3: Deprioritize Ethereum mainnet (expensive gas)
+                const aIsMainnet = aChainId === 1
+                const bIsMainnet = bChainId === 1
+                if (aIsMainnet && !bIsMainnet) return 1  // Push mainnet to end
+                if (!aIsMainnet && bIsMainnet) return -1 // Pull non-mainnet forward
+
+                // Priority 4: By USD value (highest first)
                 return b.usdValue - a.usdValue
             })
-    }, [balances, targetMarket.chainId, targetMarket.underlying])
+    }, [balances, targetMarket.chainId, targetMarket.underlying, targetMarket.aToken])
 
     const maxUsd = useMemo(() => availableAssets.reduce((sum, b) => sum + b.usdValue, 0), [availableAssets])
 
@@ -200,8 +218,70 @@ export function ZapFlow({ targetMarket, onClose, onRefresh }: ZapFlowProps) {
                     await publicClient.waitForTransactionReceipt({ hash: supplyHash })
 
                 } else if (route.route) {
-                    // --- LI.FI Execution (Cross Chain) ---
+                    // --- LI.FI Execution (Cross Chain Bridge) ---
+                    console.log('[ZapFlow] Executing cross-chain bridge')
                     await executeRoute(route.route as any)
+
+                    // --- Post-Bridge Direct Deposit ---
+                    // After the bridge completes, execute a Direct Deposit to Aave
+                    const destChainId = targetMarket.chainId
+                    const underlyingToken = targetMarket.underlying as `0x${string}`
+                    const aavePool = AAVE_V3_POOL_ADDRESSES[destChainId as keyof typeof AAVE_V3_POOL_ADDRESSES]
+
+                    if (underlyingToken && aavePool && connectedAddress) {
+                        console.log('[ZapFlow] Bridge complete, executing post-bridge Direct Deposit')
+
+                        // Switch to destination chain
+                        console.log(`[ZapFlow] Switching to destination chain ${destChainId}`)
+                        await switchChainAsync({ chainId: destChainId })
+
+                        // Get fresh public client for destination chain
+                        const destPublicClient = getPublicClient(wagmiConfig, { chainId: destChainId })
+                        if (!destPublicClient) {
+                            throw new Error(`No public client for chain ${destChainId}`)
+                        }
+
+                        // Check balance of bridged token (wait a moment for indexing)
+                        await new Promise(resolve => setTimeout(resolve, 2000))
+
+                        const bridgedBalance = await destPublicClient.readContract({
+                            address: underlyingToken,
+                            abi: erc20Abi,
+                            functionName: 'balanceOf',
+                            args: [connectedAddress]
+                        }) as bigint
+
+                        console.log(`[ZapFlow] Bridged balance on destination: ${bridgedBalance}`)
+
+                        if (bridgedBalance > BigInt(0)) {
+                            // Encode supply call
+                            const supplyCallData = encodeFunctionData({
+                                abi: AAVE_POOL_ABI,
+                                functionName: 'supply',
+                                args: [underlyingToken, bridgedBalance, connectedAddress, 0]
+                            })
+
+                            // Approve Aave Pool
+                            console.log(`[ZapFlow] Approving ${bridgedBalance} to Aave Pool`)
+                            const approveHash = await writeContractAsync({
+                                address: underlyingToken,
+                                abi: erc20Abi,
+                                functionName: 'approve',
+                                args: [aavePool as `0x${string}`, bridgedBalance],
+                            })
+                            await destPublicClient.waitForTransactionReceipt({ hash: approveHash })
+
+                            // Execute Supply
+                            console.log(`[ZapFlow] Supplying to Aave`)
+                            const supplyHash = await sendTransactionAsync({
+                                to: aavePool as `0x${string}`,
+                                data: supplyCallData,
+                                value: BigInt(0)
+                            })
+                            await destPublicClient.waitForTransactionReceipt({ hash: supplyHash })
+                            console.log('[ZapFlow] Post-bridge Direct Deposit complete!')
+                        }
+                    }
                 } else {
                     throw new Error("Invalid route configuration")
                 }
@@ -375,9 +455,13 @@ export function ZapFlow({ targetMarket, onClose, onRefresh }: ZapFlowProps) {
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-medium text-white">{result.asset.asset.symbol}</span>
                                                     <span className="text-neutral-500 text-xs">on {result.asset.chain}</span>
-                                                    {(result.isDirect || result.hasAutoDeposit) && (
+                                                    {result.isDirect ? (
                                                         <span className="ml-2 px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded uppercase font-bold tracking-wider">
-                                                            {result.isDirect ? 'Direct' : 'Auto-Deposit'}
+                                                            Direct
+                                                        </span>
+                                                    ) : (
+                                                        <span className="ml-2 px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] rounded uppercase font-bold tracking-wider">
+                                                            Bridge
                                                         </span>
                                                     )}
                                                 </div>

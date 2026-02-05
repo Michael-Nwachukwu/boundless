@@ -131,55 +131,12 @@ export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapRes
 
             let hasAutoDeposit = false
 
-            // Step 2: Auto-Deposit Logic (Contract Call)
-            // Applies to BOTH Cross-Chain and Same-Chain routes
-            if (routesResult && routesResult.length > 0 && destinationUnderlyingToken && aavePoolAddress) {
-                const initialRoute = routesResult[0]
-
-                // Use toAmountMin to be safe (guaranteed amount after slippage)
-                const safeSupplyAmount = BigInt(initialRoute.toAmountMin || initialRoute.toAmount)
-
-                try {
-                    const supplyCallData = encodeFunctionData({
-                        abi: AAVE_POOL_ABI,
-                        functionName: 'supply',
-                        args: [
-                            destinationUnderlyingToken as `0x${string}`, // Asset to supply
-                            safeSupplyAmount,                            // Amount
-                            destinationAddress as `0x${string}`,         // onBehalfOf
-                            0                                            // Referral Code
-                        ]
-                    })
-
-                    // Refetch route WITH contract call params
-                    const autoDepositRoutes = await getOptimalRoutes({
-                        fromChainId,
-                        toChainId: destinationChainId,
-                        fromTokenAddress: asset.asset.address,
-                        toTokenAddress: targetToken,
-                        fromAmount,
-                        fromAddress: request.destinationAddress,
-                        toAddress: destinationAddress,
-                        slippage: 0.005,
-                        contractCalls: [{
-                            fromAmount: safeSupplyAmount.toString(),
-                            fromTokenAddress: destinationUnderlyingToken,
-                            toContractAddress: aavePoolAddress,
-                            toContractCallData: supplyCallData,
-                            toContractGasLimit: '600000', // Gas estimate
-                            toApprovalAddress: aavePoolAddress // Critical: Tells Executor to Approve Aave Pool
-                        }]
-                    })
-
-                    if (autoDepositRoutes && autoDepositRoutes.length > 0) {
-                        routesResult = autoDepositRoutes
-                        hasAutoDeposit = true
-                        console.log(`[ZapResolver] Auto-Deposit enabled for ${asset.asset.symbol} -> Aave`)
-                    }
-                } catch (err) {
-                    console.warn('[ZapResolver] Failed to generate Auto-Deposit route, falling back to standard bridge:', err)
-                }
-            }
+            // NOTE: Auto-deposit via contract calls is disabled
+            // The LI.FI SDK's executeRoute fails with "Contract calls are not found" 
+            // when using getContractCallsQuote + convertQuoteToRoute
+            // For cross-chain, we just bridge funds to wallet
+            // User can do a second same-chain Direct Deposit after bridging
+            console.log(`[ZapResolver] Cross-chain bridge for ${asset.asset.symbol} (auto-deposit disabled)`)
 
             if (routesResult && routesResult.length > 0) {
                 const bestRoute = routesResult[0]
@@ -191,11 +148,19 @@ export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapRes
                     const price = parseFloat(bestRoute.toToken.priceUSD || '0')
                     const amount = parseFloat(formatUnits(BigInt(bestRoute.toAmount), decimals))
                     outputValue = amount * price
+                    console.log(`[ZapResolver] Route output for ${asset.asset.symbol}: amount=${amount}, price=${price}, outputValue=${outputValue}`)
+                } else if (bestRoute.toAmountUSD) {
+                    outputValue = parseFloat(bestRoute.toAmountUSD)
+                    console.log(`[ZapResolver] Route output for ${asset.asset.symbol} from toAmountUSD: ${outputValue}`)
                 } else {
-                    outputValue = parseFloat(bestRoute.toAmountUSD || '0')
+                    // Fallback: use input value as estimate
+                    outputValue = asset.usdValue
+                    console.log(`[ZapResolver] Route output for ${asset.asset.symbol} using input as fallback: ${outputValue}`)
                 }
 
+                // Sanity check: if output is unreasonably high, cap it
                 if (asset.usdValue > 0 && outputValue > asset.usdValue * 2) {
+                    console.log(`[ZapResolver] Output ${outputValue} too high, capping to input ${asset.usdValue}`)
                     outputValue = asset.usdValue
                 }
 
@@ -210,6 +175,7 @@ export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapRes
                 totalInputUsd += asset.usdValue
                 totalEstimatedOutputUsd += outputValue
                 totalGasCostUsd += gasCost
+                console.log(`[ZapResolver] Running totals - Input: ${totalInputUsd}, Output: ${totalEstimatedOutputUsd}`)
             }
         } catch (error) {
             console.error(`[resolveZapRoutes] Error resolving route for ${asset.asset.symbol}:`, error)

@@ -1,5 +1,5 @@
-import { getRoutes } from '@lifi/sdk'
-import type { Route, RoutesRequest } from '@lifi/sdk'
+import { getRoutes, getContractCallsQuote, convertQuoteToRoute } from '@lifi/sdk'
+import type { Route, RoutesRequest, ContractCallsQuoteRequest } from '@lifi/sdk'
 
 // Note: LI.FI SDK is now initialized via useLifiConfig hook in components
 // This allows proper integration with wagmi's wallet client for transaction execution
@@ -31,6 +31,18 @@ export async function getOptimalRoutes(params: {
     slippage?: number
     contractCalls?: any[] // Support for contract calls
 }): Promise<Route[]> {
+    const toAddress = params.toAddress || params.fromAddress
+    // NOTE: getContractCallsQuote is disabled due to SDK execution issues
+    // The SDK's executeRoute fails with "Contract calls are not found" when using convertQuoteToRoute
+    // For now, cross-chain routes just bridge funds to the wallet
+    // The same-chain Direct Deposit will handle the Aave supply
+    if (params.contractCalls && params.contractCalls.length > 0) {
+        console.log('[LI.FI] Contract calls requested but skipping - will use standard bridge')
+        console.log('[LI.FI] Funds will be bridged to wallet, then Direct Deposit can be used')
+        // Fall through to standard route
+    }
+
+    // Standard route without contract calls
     const routesRequest: any = {
         fromChainId: params.fromChainId,
         toChainId: params.toChainId,
@@ -38,18 +50,12 @@ export async function getOptimalRoutes(params: {
         toTokenAddress: params.toTokenAddress,
         fromAmount: params.fromAmount,
         fromAddress: params.fromAddress,
-        toAddress: params.toAddress || params.fromAddress,
+        toAddress: toAddress,
         options: {
-            slippage: params.slippage || 0.005, // 0.5% default slippage
+            slippage: params.slippage || 0.005,
             order: 'RECOMMENDED',
             allowSwitchChain: true,
-            // Note: fee and integrator are configured globally in use-lifi-config.ts
-            // Do NOT set them here or they will double-apply and reduce fromAmount incorrectly
         },
-    }
-
-    if (params.contractCalls && params.contractCalls.length > 0) {
-        routesRequest.contractCalls = params.contractCalls
     }
 
     try {
