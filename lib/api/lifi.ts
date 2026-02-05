@@ -18,6 +18,8 @@ export const CHAIN_IDS = {
 /**
  * Get optimal routes for a cross-chain swap/bridge
  */
+// ... imports
+
 export async function getOptimalRoutes(params: {
     fromChainId: number
     toChainId: number
@@ -27,8 +29,9 @@ export async function getOptimalRoutes(params: {
     fromAddress: string
     toAddress?: string
     slippage?: number
+    contractCalls?: any[] // Support for contract calls
 }): Promise<Route[]> {
-    const routesRequest: RoutesRequest = {
+    const routesRequest: any = {
         fromChainId: params.fromChainId,
         toChainId: params.toChainId,
         fromTokenAddress: params.fromTokenAddress,
@@ -44,8 +47,12 @@ export async function getOptimalRoutes(params: {
         },
     }
 
+    if (params.contractCalls && params.contractCalls.length > 0) {
+        routesRequest.contractCalls = params.contractCalls
+    }
+
     try {
-        const result = await getRoutes(routesRequest)
+        const result = await getRoutes(routesRequest as RoutesRequest)
         return result.routes
     } catch (error) {
         console.error('[LI.FI] Error fetching routes:', error)

@@ -1,0 +1,391 @@
+"use client"
+
+import { useState, useMemo } from "react"
+import { ArrowLeft, Loader2, CheckCircle, AlertCircle } from "lucide-react"
+import { useAccount, useWriteContract, useSendTransaction, usePublicClient } from 'wagmi'
+import { parseUnits, type Address, erc20Abi } from 'viem'
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { useLifiConfig } from "@/lib/hooks/use-lifi-config"
+import { useUnifiedBalance } from "@/lib/hooks/use-unified-balance"
+import { resolveZapRoutes, type ZapResult } from "@/lib/routing/zap-resolver"
+import { executeRoute } from "@/lib/api/lifi"
+import { formatCurrency } from "@/lib/utils"
+import type { Balance } from "@/lib/types/defi"
+
+interface ZapFlowProps {
+    targetMarket: {
+        chain: string
+        chainId: number
+        protocol: string
+        asset: string
+        aToken: string
+        underlying?: string
+    }
+    onClose: () => void
+    onRefresh?: () => void
+}
+
+type Step = 'amount' | 'preview' | 'executing' | 'complete'
+
+export function ZapFlow({ targetMarket, onClose, onRefresh }: ZapFlowProps) {
+    useLifiConfig()
+
+    const { address: connectedAddress } = useAccount()
+    const { writeContractAsync } = useWriteContract()
+    const { sendTransactionAsync } = useSendTransaction()
+    const publicClient = usePublicClient()
+
+    const { data: unifiedBalance, isLoading: isLoadingBalances } = useUnifiedBalance(connectedAddress)
+    const balances = unifiedBalance?.balances ?? []
+
+    // State
+    const [step, setStep] = useState<Step>('amount')
+    const [amount, setAmount] = useState('')
+    const [isResolving, setIsResolving] = useState(false)
+    const [zapResult, setZapResult] = useState<ZapResult | null>(null)
+    const [selectedSourceAssets, setSelectedSourceAssets] = useState<Balance[]>([])
+    const [executionError, setExecutionError] = useState<string | null>(null)
+    const [executionStatus, setExecutionStatus] = useState<Record<number, string>>({})
+
+    const availableAssets = useMemo(() => {
+        return balances
+            .filter(b => b.usdValue > 0.01)
+            .sort((a, b) => b.usdValue - a.usdValue)
+    }, [balances])
+
+    const maxUsd = useMemo(() => availableAssets.reduce((sum, b) => sum + b.usdValue, 0), [availableAssets])
+
+    const targetAmount = parseFloat(amount || '0')
+    const isAmountValid = targetAmount > 0 && targetAmount <= maxUsd
+
+    const getSourceAssetsForAmount = (requiredUsd: number) => {
+        let currentUsd = 0
+        const selected: Balance[] = []
+
+        for (const asset of availableAssets) {
+            if (currentUsd >= requiredUsd) break
+            const remaining = requiredUsd - currentUsd
+            const safeFloatAmount = parseFloat(asset.amount || '0').toFixed(asset.asset.decimals)
+            const totalAtomic = parseUnits(safeFloatAmount, asset.asset.decimals)
+
+            if (asset.usdValue <= remaining) {
+                selected.push({ ...asset, amount: totalAtomic.toString() })
+                currentUsd += asset.usdValue
+            } else {
+                const fraction = remaining / asset.usdValue
+                const fractionBn = BigInt(Math.floor(fraction * 1_000_000_000))
+                const partialAtomic = (totalAtomic * fractionBn) / BigInt(1_000_000_000)
+                selected.push({ ...asset, amount: partialAtomic.toString(), usdValue: remaining })
+                currentUsd += remaining
+            }
+        }
+        return selected
+    }
+
+    const handlePreview = async () => {
+        if (!isAmountValid || !connectedAddress) return
+        setIsResolving(true)
+        setExecutionError(null)
+        setZapResult(null)
+
+        try {
+            const sourceAssets = getSourceAssetsForAmount(targetAmount)
+            setSelectedSourceAssets(sourceAssets)
+
+            const result = await resolveZapRoutes({
+                assets: sourceAssets,
+                destinationChainId: targetMarket.chainId,
+                destinationToken: targetMarket.aToken,
+                destinationUnderlyingToken: targetMarket.underlying,
+                destinationAddress: connectedAddress
+            })
+
+            if (result.routes.length === 0) {
+                setExecutionError("No routes found for this Zap. Try a different amount.")
+                return
+            }
+
+            setZapResult(result)
+            setStep('preview')
+        } catch (error) {
+            console.error("Zap resolution failed:", error)
+            setExecutionError("Failed to calculate routes. Please try again.")
+        } finally {
+            setIsResolving(false)
+        }
+    }
+
+    const handleExecute = async () => {
+        if (!zapResult || !publicClient) return
+
+        setStep('executing')
+        setExecutionError(null)
+        setExecutionStatus({})
+
+        let failed = false
+        const errors: string[] = []
+
+        // Sequential Execution Loop
+        for (let i = 0; i < zapResult.routes.length; i++) {
+            const route = zapResult.routes[i]
+            setExecutionStatus(prev => ({ ...prev, [i]: 'executing' }))
+
+            try {
+                if (route.isDirect && route.directCall) {
+                    // --- Direct Deposit Execution (Same Chain) ---
+                    console.log('[ZapFlow] Direct Deposit detected')
+
+                    const { token, amount, target, callData } = route.directCall
+
+                    // 1. Approve Aave Pool
+                    // Note: This overrides allow checks for simplicity in this MVP
+                    const approveHash = await writeContractAsync({
+                        address: token,
+                        abi: erc20Abi,
+                        functionName: 'approve',
+                        args: [target, amount],
+                    })
+                    await publicClient.waitForTransactionReceipt({ hash: approveHash })
+
+                    // 2. Execute Supply via raw transaction (using encoded data)
+                    // We use sendTransactionAsync with the raw callData
+                    const supplyHash = await sendTransactionAsync({
+                        to: target,
+                        data: callData,
+                        value: BigInt(0)
+                    })
+                    await publicClient.waitForTransactionReceipt({ hash: supplyHash })
+
+                } else if (route.route) {
+                    // --- LI.FI Execution (Cross Chain) ---
+                    await executeRoute(route.route as any)
+                } else {
+                    throw new Error("Invalid route configuration")
+                }
+
+                setExecutionStatus(prev => ({ ...prev, [i]: 'completed' }))
+            } catch (err: any) {
+                console.error(`[ZapFlow] Execution failed for route ${i}:`, err)
+                setExecutionStatus(prev => ({ ...prev, [i]: 'failed' }))
+                failed = true
+                errors.push(err.message || 'Transaction failed')
+                // Stop remaining routes if one fails
+                break
+            }
+        }
+
+        if (failed) {
+            setStep('preview')
+            setExecutionError(`Execution failed: ${errors[0]}`)
+            return
+        }
+
+        setStep('complete')
+        if (onRefresh) onRefresh()
+    }
+
+    if (!targetMarket) return null
+
+    if (step === 'complete') {
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                <Card className="w-full max-w-md bg-neutral-900 border-neutral-800 p-8 flex flex-col items-center justify-center text-center space-y-6 animate-in fade-in zoom-in duration-300">
+                    <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center text-green-500">
+                        <CheckCircle className="w-8 h-8" />
+                    </div>
+                    <div className="space-y-2">
+                        <h2 className="text-2xl font-bold text-white">Zap Successful!</h2>
+                        <p className="text-neutral-400">
+                            Your assets have been successfully bridged and deposited into {targetMarket.protocol}.
+                        </p>
+                    </div>
+                    <Button
+                        onClick={onClose}
+                        className="w-full h-12 bg-white text-black hover:bg-neutral-200"
+                    >
+                        Done
+                    </Button>
+                </Card>
+            </div>
+        )
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <Card className="w-full max-w-md bg-neutral-900 border-neutral-800 p-6 flex flex-col h-[600px] overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                    <button onClick={step === 'preview' ? () => setStep('amount') : onClose} className="text-neutral-400 hover:text-white">
+                        <ArrowLeft className="w-5 h-5" />
+                    </button>
+                    <h2 className="text-lg font-bold text-white">Zap to Earn</h2>
+                    <div className="w-5" />
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-6">
+                    {/* Target Info */}
+                    <div className="p-4 bg-neutral-800/50 rounded-lg flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center font-bold text-blue-400">
+                                {targetMarket.asset === 'USDC' ? '$' : 'Ξ'}
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-white">{targetMarket.asset} Yield</h3>
+                                <p className="text-xs text-neutral-400">{targetMarket.protocol} on {targetMarket.chain}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {step === 'amount' && (
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-sm text-neutral-400">Amount to Invest (USD)</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400">$</span>
+                                    <Input
+                                        type="number"
+                                        placeholder="0.00"
+                                        className="pl-8 h-14 bg-neutral-950 border-neutral-800 text-lg"
+                                        value={amount}
+                                        onChange={(e) => setAmount(e.target.value)}
+                                        disabled={isResolving}
+                                    />
+                                </div>
+                                <div className="flex justify-between text-xs text-neutral-400 px-1">
+                                    <span>Available: {formatCurrency(maxUsd)}</span>
+                                    {isAmountValid && <span className="text-green-400">Valid Amount</span>}
+                                </div>
+                            </div>
+
+                            {executionError && (
+                                <div className="space-y-4">
+                                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-center gap-2">
+                                        <AlertCircle className="w-4 h-4 shrink-0" />
+                                        {executionError}
+                                    </div>
+
+                                    {/* Asset Preview on Error */}
+                                    {selectedSourceAssets.length > 0 && (
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <h3 className="text-xs font-semibold text-neutral-500 uppercase">Attempted Funding Sources</h3>
+                                                <span className="text-xs text-neutral-600">{selectedSourceAssets.length} tokens selected</span>
+                                            </div>
+                                            <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                                                {selectedSourceAssets.map((asset, idx) => (
+                                                    <div key={idx} className="flex justify-between items-center p-2 bg-neutral-900/50 rounded border border-neutral-800 text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            {asset.asset.logo && <img src={asset.asset.logo} alt={asset.asset.symbol} className="w-5 h-5 rounded-full" />}
+                                                            <span className="font-medium text-neutral-300">{asset.asset.symbol}</span>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-neutral-300">${formatCurrency(asset.usdValue)}</div>
+                                                            <div className="text-xs text-neutral-500">{asset.chain}</div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {isLoadingBalances && (
+                                <div className="flex items-center justify-center py-4 text-neutral-500 text-sm gap-2">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Updating balances...
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {(step === 'preview' || step === 'executing') && zapResult && (
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <h3 className="text-sm text-neutral-400">Plan Summary</h3>
+                                <div className="p-3 bg-neutral-950 rounded border border-neutral-800 space-y-2 text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-neutral-500">Total Input</span>
+                                        <span className="text-white font-mono">{formatCurrency(zapResult.totalInputUsd)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-neutral-500">Estimated Gas</span>
+                                        <span className="text-orange-400 font-mono">~{formatCurrency(zapResult.totalGasCostUsd)}</span>
+                                    </div>
+                                    <div className="h-px bg-neutral-800 my-2" />
+                                    <div className="flex justify-between font-bold">
+                                        <span className="text-white">Est. Investment</span>
+                                        <span className="text-green-400 font-mono">{formatCurrency(zapResult.totalEstimatedOutputUsd)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h3 className="text-sm text-neutral-400">Routes ({zapResult.routes.length})</h3>
+                                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+                                    {zapResult.routes.map((result, idx) => (
+                                        <div key={idx} className="flex items-center gap-3 p-3 bg-neutral-800/30 rounded border border-neutral-800">
+                                            <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center text-xs">
+                                                {idx + 1}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-medium text-white">{result.asset.asset.symbol}</span>
+                                                    <span className="text-neutral-500 text-xs">on {result.asset.chain}</span>
+                                                    {(result.isDirect || result.hasAutoDeposit) && (
+                                                        <span className="ml-2 px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded uppercase font-bold tracking-wider">
+                                                            {result.isDirect ? 'Direct' : 'Auto-Deposit'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-neutral-400 truncate">
+                                                    Using {formatCurrency(result.asset.usdValue)}
+                                                </div>
+                                            </div>
+                                            <div className="text-xs text-neutral-500">
+                                                {executionStatus[idx] === 'completed' && <CheckCircle className="w-5 h-5 text-green-500" />}
+                                                {executionStatus[idx] === 'failed' && <AlertCircle className="w-5 h-5 text-red-500" />}
+                                                {executionStatus[idx] === 'executing' && <Loader2 className="w-5 h-5 animate-spin text-blue-500" />}
+                                                {!executionStatus[idx] && 'Zap'}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-neutral-800">
+                    <Button
+                        onClick={step === 'amount' ? handlePreview : handleExecute}
+                        disabled={
+                            (step === 'amount' && !isAmountValid) ||
+                            isResolving ||
+                            step === 'executing'
+                        }
+                        className="w-full h-12 bg-white text-black hover:bg-neutral-200 disabled:opacity-50 font-bold"
+                    >
+                        {isResolving ? (
+                            <div className="flex items-center gap-2">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Finding Best Routes...
+                            </div>
+                        ) : step === 'executing' ? (
+                            <div className="flex items-center gap-2">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Executing Zap...
+                            </div>
+                        ) : step === 'preview' ? (
+                            'Execute Zap'
+                        ) : (
+                            'Review Amount'
+                        )}
+                    </Button>
+                </div>
+            </Card>
+        </div>
+    )
+}
