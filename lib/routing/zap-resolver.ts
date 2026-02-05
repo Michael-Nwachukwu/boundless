@@ -21,8 +21,9 @@ export interface ResolvedZapRoute {
     estimatedOutput: string
     gasCostUSD: number
     hasAutoDeposit?: boolean
-    isDirect?: boolean // New flag for same-chain direct deposit
+    isDirect?: boolean // Flag for same-chain direct execution
     directCall?: {
+        chainId: number // Target chain for execution
         target: `0x${string}`
         callData: `0x${string}`
         amount: bigint
@@ -39,8 +40,8 @@ export interface ZapResult {
 
 /**
  * Resolves routes for Zapping into a DeFi position.
- * Includes "Auto-Deposit" logic via Contract Calls if supported.
- * Includes "Direct Deposit" logic for same-chain assets.
+ * Uses LI.FI for ALL routes (Same-Chain and Cross-Chain), injecting Contract Calls
+ * for the deposit step.
  */
 export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapResult> {
     const { assets, destinationChainId, destinationToken, destinationUnderlyingToken, destinationAddress } = request
@@ -54,20 +55,32 @@ export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapRes
     for (const asset of assets) {
         try {
             const fromChainId = getChainId(asset.chain)
-            if (!fromChainId) continue
+            if (!fromChainId) {
+                console.warn(`[ZapResolver] Skipping asset ${asset.asset.symbol} - unknown chain: ${asset.chain}`)
+                continue
+            }
 
             const fromAmount = asset.amount
             const targetToken = destinationUnderlyingToken || destinationToken
             const aavePoolAddress = AAVE_V3_POOL_ADDRESSES[destinationChainId]
 
-            // Check for Same-Chain Direct Deposit
-            // Condition: Same Chain AND Asset is the Underlying Token
+            // Debug logging for chain comparison
+            console.log(`[ZapResolver] Processing ${asset.asset.symbol}:`, {
+                fromChain: asset.chain,
+                fromChainId,
+                destinationChainId,
+                isSameChain: fromChainId === destinationChainId,
+                aavePoolAddress
+            })
+
+            // CHECK: Direct Deposit (Same Chain + Same Token)
+            // If we are on the destination chain and holding the underlying asset, 
+            // we should NOT use LI.FI. Just Approve + Supply directly.
             if (fromChainId === destinationChainId &&
                 destinationUnderlyingToken &&
                 asset.asset.address.toLowerCase() === destinationUnderlyingToken.toLowerCase() &&
                 aavePoolAddress) {
 
-                // Direct Deposit Logic
                 const amount = BigInt(fromAmount)
 
                 const supplyCallData = encodeFunctionData({
@@ -81,14 +94,15 @@ export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapRes
                     ]
                 })
 
-                // Construct Direct Route
+                // Create a Direct Route (Bypassing LI.FI)
                 routes.push({
                     asset,
-                    estimatedOutput: fromAmount, // 1:1 conversion for direct deposit
-                    gasCostUSD: 0.5, // Assume negligible gas ~$0.50
+                    estimatedOutput: fromAmount, // 1:1 ratio
+                    gasCostUSD: 0.1, // Negligible
                     hasAutoDeposit: true,
-                    isDirect: true,
+                    isDirect: true, // Flag for ZapFlow
                     directCall: {
+                        chainId: fromChainId, // Target chain for execution
                         target: aavePoolAddress,
                         callData: supplyCallData,
                         amount: amount,
@@ -97,11 +111,13 @@ export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapRes
                 })
 
                 totalInputUsd += asset.usdValue
-                totalEstimatedOutputUsd += asset.usdValue // 1:1
-                continue // Skip LI.FI routing
+                totalEstimatedOutputUsd += asset.usdValue
+                continue
             }
 
-            // Cross-Chain Logic (LI.FI)
+            // Step 1: Get Initial Route (to estimate output amount)
+            // We need this to encode the 'supply' call with the correct amount
+            // This works for Same-Chain too (LI.FI returns a route with 0 bridge steps, just swap/transfer)
             let routesResult = await getOptimalRoutes({
                 fromChainId,
                 toChainId: destinationChainId,
@@ -115,9 +131,12 @@ export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapRes
 
             let hasAutoDeposit = false
 
-            // Auto-Deposit Logic (Contract Call)
+            // Step 2: Auto-Deposit Logic (Contract Call)
+            // Applies to BOTH Cross-Chain and Same-Chain routes
             if (routesResult && routesResult.length > 0 && destinationUnderlyingToken && aavePoolAddress) {
                 const initialRoute = routesResult[0]
+
+                // Use toAmountMin to be safe (guaranteed amount after slippage)
                 const safeSupplyAmount = BigInt(initialRoute.toAmountMin || initialRoute.toAmount)
 
                 try {
@@ -125,13 +144,14 @@ export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapRes
                         abi: AAVE_POOL_ABI,
                         functionName: 'supply',
                         args: [
-                            destinationUnderlyingToken as `0x${string}`,
-                            safeSupplyAmount,
-                            destinationAddress as `0x${string}`,
-                            0
+                            destinationUnderlyingToken as `0x${string}`, // Asset to supply
+                            safeSupplyAmount,                            // Amount
+                            destinationAddress as `0x${string}`,         // onBehalfOf
+                            0                                            // Referral Code
                         ]
                     })
 
+                    // Refetch route WITH contract call params
                     const autoDepositRoutes = await getOptimalRoutes({
                         fromChainId,
                         toChainId: destinationChainId,
@@ -146,7 +166,8 @@ export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapRes
                             fromTokenAddress: destinationUnderlyingToken,
                             toContractAddress: aavePoolAddress,
                             toContractCallData: supplyCallData,
-                            toContractGasLimit: '500000'
+                            toContractGasLimit: '600000', // Gas estimate
+                            toApprovalAddress: aavePoolAddress // Critical: Tells Executor to Approve Aave Pool
                         }]
                     })
 
@@ -154,9 +175,6 @@ export async function resolveZapRoutes(request: ZapRouteRequest): Promise<ZapRes
                         routesResult = autoDepositRoutes
                         hasAutoDeposit = true
                         console.log(`[ZapResolver] Auto-Deposit enabled for ${asset.asset.symbol} -> Aave`)
-                    } else {
-                        // Fallback check: If autoDeposit failed to generate a route, do we warn?
-                        console.warn(`[ZapResolver] Auto-Deposit route generation failed/empty for ${asset.asset.symbol}`)
                     }
                 } catch (err) {
                     console.warn('[ZapResolver] Failed to generate Auto-Deposit route, falling back to standard bridge:', err)

@@ -43,7 +43,8 @@ export async function getOptimalRoutes(params: {
             slippage: params.slippage || 0.005, // 0.5% default slippage
             order: 'RECOMMENDED',
             allowSwitchChain: true,
-            // fee and integrator are configured globally in createConfig
+            // Note: fee and integrator are configured globally in use-lifi-config.ts
+            // Do NOT set them here or they will double-apply and reduce fromAmount incorrectly
         },
     }
 
@@ -116,20 +117,54 @@ export async function getQuote(params: {
 
 /**
  * Convert chain name to chain ID
+ * Handles various naming conventions from different data sources (Zerion, LI.FI, etc.)
  */
 export function getChainId(chainName: string): number {
+    const normalized = chainName.toLowerCase().replace(/[\s-_]/g, '')
+
     const mapping: Record<string, number> = {
+        // Ethereum
         ethereum: 1,
+        eth: 1,
+        mainnet: 1,
+
+        // Optimism
         optimism: 10,
+        op: 10,
+        optimismmainnet: 10,
+
+        // Arbitrum
         arbitrum: 42161,
+        arb: 42161,
+        arbitrumone: 42161,
+        arbitrummainnet: 42161,
+
+        // Base
         base: 8453,
+        basemainnet: 8453,
+
+        // BSC
         bsc: 56,
-        'binance-smart-chain': 56,
+        binancesmartchain: 56,
+        bnb: 56,
+        bnbchain: 56,
+
+        // Scroll
         scroll: 534352,
+        scrollmainnet: 534352,
+
+        // zkSync
         zksync: 324,
-        'zksync-era': 324,
+        zksyncera: 324,
+        zksyncmainnet: 324,
     }
-    return mapping[chainName.toLowerCase()] || 1
+
+    const chainId = mapping[normalized]
+    if (!chainId) {
+        console.warn(`[getChainId] Unknown chain name: "${chainName}" (normalized: "${normalized}")`)
+        return 0 // Return 0 instead of 1 to avoid false matches
+    }
+    return chainId
 }
 
 /**

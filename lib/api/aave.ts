@@ -1,4 +1,4 @@
-import { createPublicClient, http, type Address } from 'viem'
+import { createPublicClient, http, getAddress, type Address } from 'viem'
 import { mainnet, optimism, arbitrum, base } from 'viem/chains'
 import { AAVE_V3_POOL_ADDRESSES, AAVE_POOL_ABI } from '@/lib/constants/aave'
 
@@ -48,7 +48,7 @@ export async function getAaveSupplyAPY(chainId: number, tokenAddress: string): P
             address: poolAddress,
             abi: AAVE_POOL_ABI,
             functionName: 'getReserveData',
-            args: [tokenAddress as Address]
+            args: [getAddress(tokenAddress)]
         }) as any // Typing strictly is complex with large tuple returns
 
         const currentLiquidityRate = reserveData[2] // 3rd item is currentLiquidityRate

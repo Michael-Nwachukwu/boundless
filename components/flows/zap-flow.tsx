@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from "react"
 import { ArrowLeft, Loader2, CheckCircle, AlertCircle } from "lucide-react"
-import { useAccount, useWriteContract, useSendTransaction, usePublicClient } from 'wagmi'
+import { useAccount, useWriteContract, useSendTransaction, useSwitchChain, useConfig } from 'wagmi'
+import { getPublicClient } from '@wagmi/core'
 import { parseUnits, type Address, erc20Abi } from 'viem'
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -10,9 +11,12 @@ import { Input } from "@/components/ui/input"
 import { useLifiConfig } from "@/lib/hooks/use-lifi-config"
 import { useUnifiedBalance } from "@/lib/hooks/use-unified-balance"
 import { resolveZapRoutes, type ZapResult } from "@/lib/routing/zap-resolver"
-import { executeRoute } from "@/lib/api/lifi"
+import { executeRoute, getChainId } from "@/lib/api/lifi"
 import { formatCurrency } from "@/lib/utils"
 import type { Balance } from "@/lib/types/defi"
+
+// Helper to get chainId from chain name
+const getChainIdFromName = (chainName: string): number => getChainId(chainName)
 
 interface ZapFlowProps {
     targetMarket: {
@@ -35,7 +39,8 @@ export function ZapFlow({ targetMarket, onClose, onRefresh }: ZapFlowProps) {
     const { address: connectedAddress } = useAccount()
     const { writeContractAsync } = useWriteContract()
     const { sendTransactionAsync } = useSendTransaction()
-    const publicClient = usePublicClient()
+    const { switchChainAsync } = useSwitchChain()
+    const wagmiConfig = useConfig()
 
     const { data: unifiedBalance, isLoading: isLoadingBalances } = useUnifiedBalance(connectedAddress)
     const balances = unifiedBalance?.balances ?? []
@@ -49,11 +54,35 @@ export function ZapFlow({ targetMarket, onClose, onRefresh }: ZapFlowProps) {
     const [executionError, setExecutionError] = useState<string | null>(null)
     const [executionStatus, setExecutionStatus] = useState<Record<number, string>>({})
 
+    // Prioritize assets: 1) Same chain + underlying token, 2) Same chain, 3) Cross-chain by USD value
     const availableAssets = useMemo(() => {
+        const targetChainId = targetMarket.chainId
+        const underlyingToken = targetMarket.underlying?.toLowerCase()
+
         return balances
             .filter(b => b.usdValue > 0.01)
-            .sort((a, b) => b.usdValue - a.usdValue)
-    }, [balances])
+            .sort((a, b) => {
+                const aChainId = getChainIdFromName(a.chain)
+                const bChainId = getChainIdFromName(b.chain)
+
+                const aIsSameChain = aChainId === targetChainId
+                const bIsSameChain = bChainId === targetChainId
+
+                const aIsUnderlying = aIsSameChain && underlyingToken && a.asset.address.toLowerCase() === underlyingToken
+                const bIsUnderlying = bIsSameChain && underlyingToken && b.asset.address.toLowerCase() === underlyingToken
+
+                // Priority 1: Same chain + exact underlying token (BEST for direct deposit)
+                if (aIsUnderlying && !bIsUnderlying) return -1
+                if (!aIsUnderlying && bIsUnderlying) return 1
+
+                // Priority 2: Same chain assets
+                if (aIsSameChain && !bIsSameChain) return -1
+                if (!aIsSameChain && bIsSameChain) return 1
+
+                // Priority 3: By USD value (highest first)
+                return b.usdValue - a.usdValue
+            })
+    }, [balances, targetMarket.chainId, targetMarket.underlying])
 
     const maxUsd = useMemo(() => availableAssets.reduce((sum, b) => sum + b.usdValue, 0), [availableAssets])
 
@@ -118,7 +147,7 @@ export function ZapFlow({ targetMarket, onClose, onRefresh }: ZapFlowProps) {
     }
 
     const handleExecute = async () => {
-        if (!zapResult || !publicClient) return
+        if (!zapResult) return
 
         setStep('executing')
         setExecutionError(null)
@@ -137,25 +166,37 @@ export function ZapFlow({ targetMarket, onClose, onRefresh }: ZapFlowProps) {
                     // --- Direct Deposit Execution (Same Chain) ---
                     console.log('[ZapFlow] Direct Deposit detected')
 
-                    const { token, amount, target, callData } = route.directCall
+                    const { chainId, token, amount, target, callData } = route.directCall
+
+                    // 0. Switch to correct chain FIRST
+                    console.log(`[ZapFlow] Switching to chain ${chainId}`)
+                    await switchChainAsync({ chainId })
+
+                    // Get fresh publicClient for the NEW chain after switching
+                    const publicClient = getPublicClient(wagmiConfig, { chainId })
+                    if (!publicClient) {
+                        throw new Error(`No public client available for chain ${chainId}`)
+                    }
 
                     // 1. Approve Aave Pool
-                    // Note: This overrides allow checks for simplicity in this MVP
+                    console.log(`[ZapFlow] Approving token ${token} for ${target}`)
                     const approveHash = await writeContractAsync({
                         address: token,
                         abi: erc20Abi,
                         functionName: 'approve',
                         args: [target, amount],
                     })
+                    console.log(`[ZapFlow] Waiting for approval tx: ${approveHash}`)
                     await publicClient.waitForTransactionReceipt({ hash: approveHash })
 
-                    // 2. Execute Supply via raw transaction (using encoded data)
-                    // We use sendTransactionAsync with the raw callData
+                    // 2. Execute Supply via raw transaction
+                    console.log(`[ZapFlow] Executing supply to ${target}`)
                     const supplyHash = await sendTransactionAsync({
                         to: target,
                         data: callData,
                         value: BigInt(0)
                     })
+                    console.log(`[ZapFlow] Waiting for supply tx: ${supplyHash}`)
                     await publicClient.waitForTransactionReceipt({ hash: supplyHash })
 
                 } else if (route.route) {
