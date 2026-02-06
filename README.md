@@ -12,7 +12,7 @@
 
 ---
 
-## 🎯 The Problem We Solve
+## The Problem We Solve
 
 Web3 users face **fragmented liquidity** - assets scattered across multiple chains and wallets make it nearly impossible to:
 - Track total net worth efficiently
@@ -27,7 +27,7 @@ Boundless is a unified DeFi management interface that abstracts away the complex
 
 ---
 
-## 📊 Application Flow
+## Application Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -95,15 +95,15 @@ Boundless is a unified DeFi management interface that abstracts away the complex
 
 ---
 
-## ✨ Features
+## Features
 
-### 1. 🎯 Unified Portfolio Dashboard
+### 1. Unified Portfolio Dashboard
 - **Aggregate View**: See total net worth across Ethereum, Base, Arbitrum, Optimism, and more
 - **Asset Breakdown**: Drill down by chain or view consolidated token balances
 - **Real-time Pricing**: Powered by Zerion's unified balance API
 - **ENS Integration**: Display wallet identities with ENS names and avatars
 
-### 2. 🔄 Squeeze (Multi-Asset Consolidation)
+### 2. Squeeze (Multi-Asset Consolidation)
 **The Problem**: You have $2 USDC on Optimism, $5 DAI on Arbitrum, $3 ETH on Base  
 **The Solution**: Select all three → Squeeze into "USDC on Base" → One transaction flow
 
@@ -120,7 +120,7 @@ resolveSqueezeRoutes({
 - Executes sequentially with status tracking
 - Handles failures gracefully (continues if one route fails)
 
-### 3. 💸 Pull & Refuel
+### 3. Pull & Refuel
 
 #### Pull
 Move liquidity from other chains to your current location
@@ -134,7 +134,7 @@ Never get stuck without gas
 - **Native Token Routing**: Bridges ETH/MATIC/BNB for gas fees
 - **Fallback Logic**: If primary asset fails, tries next available
 
-### 4. ⚡ DeFi Zaps (Aave V3 Integration)
+### 4. DeFi Zaps (Aave V3 Integration)
 
 #### Same-Chain Direct Deposit
 ```
@@ -165,7 +165,7 @@ Done! Bridged + Deposited in one flow
 - Estimates fees and output amounts
 - Handles chain switching automatically
 
-### 5. 📈 My Positions & Yield Tracking
+### 5. My Positions & Yield Tracking
 
 #### Position Dashboard
 - **aToken Detection**: Automatically identifies Aave vault tokens
@@ -194,7 +194,7 @@ Pool.withdraw(
 
 ---
 
-## 🔌 Key Integrations
+## Key Integrations
 
 ### 1. LI.FI SDK (Core Routing Engine)
 
@@ -290,7 +290,7 @@ export function useUnifiedBalance(address?: `0x${string}`) {
 
 ---
 
-## 🏗️ Technical Architecture
+## Technical Architecture
 
 ### Tech Stack
 
@@ -411,7 +411,7 @@ boundless/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Node.js 18+
@@ -457,7 +457,7 @@ npm start
 
 ---
 
-## 🎨 Design Philosophy
+## Design Philosophy
 
 1. **Chain Abstraction**: Users shouldn't think about chains - just assets
 2. **Intent-Based**: "I want USDC on Base" not "Bridge from Arbitrum via Hop to Base then swap"
@@ -466,7 +466,7 @@ npm start
 
 ---
 
-## 🔐 Security Considerations
+## Security Considerations
 
 - All private keys remain in user's wallet - we never custody funds
 - Contract interactions use standard, audited protocols (Aave V3)
@@ -475,7 +475,7 @@ npm start
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 Built with:
 - [LI.FI](https://li.fi) - Cross-chain routing infrastructure
