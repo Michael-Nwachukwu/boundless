@@ -1,5 +1,5 @@
-import { getRoutes } from '@lifi/sdk'
-import type { Route, RoutesRequest } from '@lifi/sdk'
+import { getRoutes, getContractCallsQuote, convertQuoteToRoute } from '@lifi/sdk'
+import type { Route, RoutesRequest, ContractCallsQuoteRequest } from '@lifi/sdk'
 
 // Note: LI.FI SDK is now initialized via useLifiConfig hook in components
 // This allows proper integration with wagmi's wallet client for transaction execution
@@ -18,6 +18,8 @@ export const CHAIN_IDS = {
 /**
  * Get optimal routes for a cross-chain swap/bridge
  */
+// ... imports
+
 export async function getOptimalRoutes(params: {
     fromChainId: number
     toChainId: number
@@ -27,25 +29,37 @@ export async function getOptimalRoutes(params: {
     fromAddress: string
     toAddress?: string
     slippage?: number
+    contractCalls?: any[] // Support for contract calls
 }): Promise<Route[]> {
-    const routesRequest: RoutesRequest = {
+    const toAddress = params.toAddress || params.fromAddress
+    // NOTE: getContractCallsQuote is disabled due to SDK execution issues
+    // The SDK's executeRoute fails with "Contract calls are not found" when using convertQuoteToRoute
+    // For now, cross-chain routes just bridge funds to the wallet
+    // The same-chain Direct Deposit will handle the Aave supply
+    if (params.contractCalls && params.contractCalls.length > 0) {
+        console.log('[LI.FI] Contract calls requested but skipping - will use standard bridge')
+        console.log('[LI.FI] Funds will be bridged to wallet, then Direct Deposit can be used')
+        // Fall through to standard route
+    }
+
+    // Standard route without contract calls
+    const routesRequest: any = {
         fromChainId: params.fromChainId,
         toChainId: params.toChainId,
         fromTokenAddress: params.fromTokenAddress,
         toTokenAddress: params.toTokenAddress,
         fromAmount: params.fromAmount,
         fromAddress: params.fromAddress,
-        toAddress: params.toAddress || params.fromAddress,
+        toAddress: toAddress,
         options: {
-            slippage: params.slippage || 0.005, // 0.5% default slippage
+            slippage: params.slippage || 0.005,
             order: 'RECOMMENDED',
             allowSwitchChain: true,
-            // fee and integrator are configured globally in createConfig
         },
     }
 
     try {
-        const result = await getRoutes(routesRequest)
+        const result = await getRoutes(routesRequest as RoutesRequest)
         return result.routes
     } catch (error) {
         console.error('[LI.FI] Error fetching routes:', error)
@@ -109,20 +123,54 @@ export async function getQuote(params: {
 
 /**
  * Convert chain name to chain ID
+ * Handles various naming conventions from different data sources (Zerion, LI.FI, etc.)
  */
 export function getChainId(chainName: string): number {
+    const normalized = chainName.toLowerCase().replace(/[\s-_]/g, '')
+
     const mapping: Record<string, number> = {
+        // Ethereum
         ethereum: 1,
+        eth: 1,
+        mainnet: 1,
+
+        // Optimism
         optimism: 10,
+        op: 10,
+        optimismmainnet: 10,
+
+        // Arbitrum
         arbitrum: 42161,
+        arb: 42161,
+        arbitrumone: 42161,
+        arbitrummainnet: 42161,
+
+        // Base
         base: 8453,
+        basemainnet: 8453,
+
+        // BSC
         bsc: 56,
-        'binance-smart-chain': 56,
+        binancesmartchain: 56,
+        bnb: 56,
+        bnbchain: 56,
+
+        // Scroll
         scroll: 534352,
+        scrollmainnet: 534352,
+
+        // zkSync
         zksync: 324,
-        'zksync-era': 324,
+        zksyncera: 324,
+        zksyncmainnet: 324,
     }
-    return mapping[chainName.toLowerCase()] || 1
+
+    const chainId = mapping[normalized]
+    if (!chainId) {
+        console.warn(`[getChainId] Unknown chain name: "${chainName}" (normalized: "${normalized}")`)
+        return 0 // Return 0 instead of 1 to avoid false matches
+    }
+    return chainId
 }
 
 /**

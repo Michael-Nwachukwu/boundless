@@ -1,6 +1,7 @@
 "use client"
 
 import { ArrowRight, Zap, Shield, RefreshCw } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 
@@ -10,6 +11,7 @@ interface HeroProps {
 }
 
 export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
+  const router = useRouter()
   return (
     <div className="min-h-screen bg-black text-white flex flex-col justify-center relative overflow-hidden">
       {/* Animated Background Elements */}
@@ -31,6 +33,13 @@ export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
       {/* Content */}
       <div className="relative z-10 px-6 md:px-8">
         <div className="max-w-4xl">
+          {/* logo */}
+          <div className="flex items-center gap-2 mb-8">
+            <div className="w-8 h-8 rounded-md bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-sm font-bold">
+            </div>
+            <h1 className="text-md font-bold tracking-wider">BOUNDLESS</h1>
+          </div>
+
           {/* Tag */}
           <div className="inline-block mb-8">
             <div className="px-4 py-2 border border-orange-500/30 rounded-full bg-orange-500/5 flex items-center gap-2">
@@ -98,7 +107,7 @@ export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
                       }
                       return (
                         <Button
-                          onClick={onConnectWallet} // Navigate to dashboard
+                          onClick={() => router.push('/boundless')}
                           className="h-12 px-8 bg-orange-500 hover:bg-orange-600 text-white text-base font-semibold flex items-center justify-center gap-2"
                         >
                           Go to Dashboard

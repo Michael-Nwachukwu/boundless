@@ -30,7 +30,7 @@ export function RefuelFlow() {
   useLifiConfig()
 
   const { address: connectedAddress } = useAccount()
-  const { data: unifiedBalance, isLoading: isLoadingBalances } = useUnifiedBalance(connectedAddress)
+  const { data: unifiedBalance, isLoading: isLoadingBalances, refetch: refetchBalance } = useUnifiedBalance(connectedAddress)
 
   const balances = unifiedBalance?.balances ?? []
   const totalUsd = unifiedBalance?.totalUsd ?? 0
@@ -74,9 +74,21 @@ export function RefuelFlow() {
   const autoSelectedAssets = useMemo(() => {
     if (requestedAmount <= 0 || !balances || balances.length === 0) return []
 
+    // aToken patterns (Aave vault tokens) - should never be used as source
+    const isAaveToken = (symbol: string) => {
+      const s = symbol.toLowerCase()
+      // Match patterns like aBasUSDC, aArbUSDC, aOptUSDC, aEthUSDC, etc.
+      return s.startsWith('abas') || s.startsWith('aarb') ||
+        s.startsWith('aopt') || s.startsWith('aeth') ||
+        s.startsWith('apol') || s.startsWith('aava') ||
+        // Also catch any aToken format: a{3+chars}{token}
+        /^a[a-z]{3,}[a-z0-9]+$/i.test(symbol)
+    }
+
     // Sort by value descending (use largest assets first)
     const sortedBalances = [...balances]
       .filter((b: Balance) => b.chain !== destinationChain.id && b.usdValue > 0.01)
+      .filter((b: Balance) => !isAaveToken(b.asset.symbol)) // Exclude aTokens
       .sort((a: Balance, b: Balance) => b.usdValue - a.usdValue)
 
     const selected: Balance[] = []
@@ -146,7 +158,14 @@ export function RefuelFlow() {
       setRouteStatuses(result.routes.map(() => 'pending'))
 
       if (result.routes.length === 0) {
-        setRouteError('No routes found for refueling')
+        if (result.skippedAssets.length > 0) {
+          const skippedInfo = result.skippedAssets
+            .map(s => `${s.asset.asset.symbol}: ${s.reason}`)
+            .join(', ')
+          setRouteError(`No routes found for refueling. Skipped: ${skippedInfo}`)
+        } else {
+          setRouteError('No routes found for refueling. Try selecting different assets.')
+        }
       }
     } catch (error) {
       console.error('[RefuelFlow] Route resolution error:', error)
@@ -184,6 +203,12 @@ export function RefuelFlow() {
       })
 
       setStep('complete')
+
+      // Refresh portfolio balance after completion (even partial)
+      if (result.successfulRoutes > 0) {
+        // Delay slightly to allow blockchain state to update
+        setTimeout(() => refetchBalance(), 3000)
+      }
 
       if (result.failedRoutes > 0) {
         setExecutionError(

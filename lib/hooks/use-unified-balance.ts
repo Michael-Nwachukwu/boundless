@@ -41,12 +41,17 @@ export function useUnifiedBalance(address?: string) {
                         // Extract token details - handle both nested and flat structures
                         const symbol = fungibleInfo.symbol || fungibleInfo.data?.attributes?.symbol || 'UNKNOWN'
                         const name = fungibleInfo.name || fungibleInfo.data?.attributes?.name || symbol
-                        const decimals = fungibleInfo.decimals ?? fungibleInfo.data?.attributes?.decimals ?? 18
+
+                        // Default to 18, but sanitize known stablecoins like USDC/USDT to 6 if likely incorrect
+                        let decimals = fungibleInfo.decimals ?? fungibleInfo.data?.attributes?.decimals ?? 18
+                        if (['USDC', 'USDT'].includes(symbol)) {
+                            decimals = 6
+                        }
                         const icon = fungibleInfo.icon?.url || fungibleInfo.data?.attributes?.icon?.url
 
                         // Get quantity and value
                         const quantity = pos.attributes?.quantity?.numeric || '0'
-                        const value = pos.attributes?.value ?? 0
+                        const value = Number(pos.attributes?.value ?? 0)
 
                         // Get token address from implementations
                         const implementations = fungibleInfo.implementations || fungibleInfo.data?.attributes?.implementations || []
