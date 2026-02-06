@@ -41,7 +41,7 @@ export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
           </div>
 
           {/* Tag */}
-          <div className="inline-flex gap-3 mb-8">
+          <div className="flex flex-col sm:flex-row gap-3 mb-8">
             <div className="px-4 py-2 border border-orange-500/30 rounded-full bg-orange-500/5 flex items-center gap-2">
               <Zap className="w-4 h-4 text-orange-500" />
               <span className="text-sm text-orange-400">Now available on 5+ blockchains</span>
