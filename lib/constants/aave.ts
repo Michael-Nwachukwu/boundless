@@ -90,6 +90,19 @@ export const AAVE_POOL_ABI = [
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
+    },
+    {
+        "inputs": [
+            { "internalType": "address", "name": "asset", "type": "address" },
+            { "internalType": "uint256", "name": "amount", "type": "uint256" },
+            { "internalType": "address", "name": "to", "type": "address" }
+        ],
+        "name": "withdraw",
+        "outputs": [
+            { "internalType": "uint256", "name": "", "type": "uint256" }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
     }
 ] as const
 
@@ -140,3 +153,59 @@ export const SUPPORTED_EARN_MARKETS = [
         underlying: '0x0b2C639c533813f4Aa9D7837CAf992c96bdB5a5f' // Opt USDC
     }
 ]
+
+// Reverse lookup: aToken address -> metadata (for positions display)
+// Note: estimatedAPY is approximate - should fetch from Aave API for accuracy
+export const ATOKEN_METADATA: Record<string, {
+    chainId: number
+    chain: string
+    symbol: string
+    underlyingSymbol: string
+    underlying: `0x${string}`
+    decimals: number
+    estimatedAPY: number // Approximate supply APY (e.g., 0.035 = 3.5%)
+}> = {
+    // Base
+    '0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB': {
+        chainId: 8453, chain: 'Base', symbol: 'aBasUSDC',
+        underlyingSymbol: 'USDC', underlying: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6,
+        estimatedAPY: 0.045 // ~4.5% APY
+    },
+    '0xD4a0e0b9149BCee3C920d2E00b5dE09138fd8bb7': {
+        chainId: 8453, chain: 'Base', symbol: 'aBasWETH',
+        underlyingSymbol: 'ETH', underlying: '0x4200000000000000000000000000000000000006', decimals: 18,
+        estimatedAPY: 0.012 // ~1.2% APY
+    },
+    // Arbitrum
+    '0x625E7708f30cA75bfd92586e17077590C60eb4cD': {
+        chainId: 42161, chain: 'Arbitrum', symbol: 'aArbUSDC',
+        underlyingSymbol: 'USDC', underlying: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6,
+        estimatedAPY: 0.038 // ~3.8% APY
+    },
+    '0xe50fA9b3c56FfB159cB0FCA61F5c9D750e8128c8': {
+        chainId: 42161, chain: 'Arbitrum', symbol: 'aArbWETH',
+        underlyingSymbol: 'ETH', underlying: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', decimals: 18,
+        estimatedAPY: 0.008 // ~0.8% APY
+    },
+    // Optimism - Note: Same addresses as Arbitrum in Aave V3
+    // Ethereum
+    '0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c': {
+        chainId: 1, chain: 'Ethereum', symbol: 'aEthUSDC',
+        underlyingSymbol: 'USDC', underlying: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6,
+        estimatedAPY: 0.042 // ~4.2% APY
+    },
+    '0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8': {
+        chainId: 1, chain: 'Ethereum', symbol: 'aEthWETH',
+        underlyingSymbol: 'ETH', underlying: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18,
+        estimatedAPY: 0.015 // ~1.5% APY
+    }
+}
+
+// Helper to check if an asset is an aToken
+export function isAaveToken(symbol: string): boolean {
+    const s = symbol.toLowerCase()
+    return s.startsWith('abas') || s.startsWith('aarb') ||
+        s.startsWith('aopt') || s.startsWith('aeth') ||
+        s.startsWith('apol') || s.startsWith('aava') ||
+        /^a[a-z]{3,}[a-z0-9]+$/i.test(symbol)
+}

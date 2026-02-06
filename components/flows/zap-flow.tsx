@@ -368,7 +368,7 @@ export function ZapFlow({ targetMarket, onClose, onRefresh }: ZapFlowProps) {
                                     <Input
                                         type="number"
                                         placeholder="0.00"
-                                        className="pl-8 h-14 bg-neutral-950 border-neutral-800 text-lg"
+                                        className="pl-8 h-14 bg-neutral-950 border-neutral-800 text-lg hover:text-white text-white"
                                         value={amount}
                                         onChange={(e) => setAmount(e.target.value)}
                                         disabled={isResolving}
