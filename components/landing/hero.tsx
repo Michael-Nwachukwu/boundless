@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight, Zap, Shield, RefreshCw } from "lucide-react"
+import { ArrowRight, Zap, TrendingUp, RefreshCw } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -41,10 +41,14 @@ export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
           </div>
 
           {/* Tag */}
-          <div className="inline-block mb-8">
+          <div className="inline-flex gap-3 mb-8">
             <div className="px-4 py-2 border border-orange-500/30 rounded-full bg-orange-500/5 flex items-center gap-2">
               <Zap className="w-4 h-4 text-orange-500" />
               <span className="text-sm text-orange-400">Now available on 5+ blockchains</span>
+            </div>
+            <div className="px-4 py-2 border border-orange-500/30 rounded-full bg-orange-500/5 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-orange-500" />
+              <span className="text-sm text-orange-400">Aave V3 Integrated natively</span>
             </div>
           </div>
 
@@ -157,12 +161,12 @@ export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
             <div className="flex gap-4 p-4 rounded-lg bg-neutral-900/50 border border-neutral-700/50 hover:border-orange-500/30 transition-all">
               <div className="flex-shrink-0">
                 <div className="flex items-center justify-center w-10 h-10 rounded border border-orange-500/30 bg-orange-500/5">
-                  <Shield className="w-5 h-5 text-orange-500" />
+                  <TrendingUp className="w-5 h-5 text-orange-500" />
                 </div>
               </div>
               <div>
-                <h3 className="font-semibold text-white mb-1">Liquidation Protection</h3>
-                <p className="text-sm text-neutral-400">Auto-pull to protect your positions</p>
+                <h3 className="font-semibold text-white mb-1">Earn Yield</h3>
+                <p className="text-sm text-neutral-400">Zap into Aave V3 vaults and earn yield on your unified balance</p>
               </div>
             </div>
           </div>

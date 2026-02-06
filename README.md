@@ -23,6 +23,8 @@ Web3 users face **fragmented liquidity** - assets scattered across multiple chai
 
 **Boundless solves this.** One interface. All your chains. Intelligent routing powered by LI.FI.
 
+Boundless is a unified DeFi management interface that abstracts away the complexities of cross-chain liquidity. Manage your positions, refuel gas, and consolidate dust—all from a single, intuitive dashboard.
+
 ---
 
 ## 📊 Application Flow
@@ -470,22 +472,6 @@ npm start
 - Contract interactions use standard, audited protocols (Aave V3)
 - LI.FI routes are validated before execution
 - ENS resolution happens on-chain via standard resolvers
-
----
-
-## 🛣️ Roadmap
-
-- [ ] Support for additional DeFi protocols (Compound, Yearn)
-- [ ] Automated liquidation protection with monitoring
-- [ ] Portfolio rebalancing suggestions
-- [ ] Gas optimization recommendations
-- [ ] Mobile app (React Native)
-
----
-
-## 📄 License
-
-MIT © 2024 Boundless
 
 ---
 
