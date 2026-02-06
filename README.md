@@ -233,11 +233,11 @@ export async function resolveSqueezeRoutes(request: SqueezeRequest) {
 - Transaction monitoring with status callbacks
 
 **Features We Use**:
-- ✅ `getRoutes()` - Multi-chain route discovery
-- ✅ `executeRoute()` - Transaction execution with monitoring
-- ✅ `getChainId()` - Chain name normalization
-- ✅ Custom fee configuration
-- ✅ Slippage management
+- - `getRoutes()` - Multi-chain route discovery
+- - `executeRoute()` - Transaction execution with monitoring
+- - `getChainId()` - Chain name normalization
+- - Custom fee configuration
+- - Slippage management
 
 ### 2. ENS (Ethereum Name Service)
 

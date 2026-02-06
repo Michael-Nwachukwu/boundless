@@ -4,13 +4,9 @@ import { ArrowRight, Zap, TrendingUp, RefreshCw } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import Link from "next/link";
 
-interface HeroProps {
-  onConnectWallet: () => void
-  onViewDemo: () => void
-}
-
-export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
+export function Hero() {
   const router = useRouter()
   return (
     <div className="min-h-screen bg-black text-white flex flex-col justify-center relative overflow-hidden">
@@ -110,13 +106,10 @@ export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
                         );
                       }
                       return (
-                        <Button
-                          onClick={() => router.push('/boundless')}
-                          className="h-12 px-8 bg-orange-500 hover:bg-orange-600 text-white text-base font-semibold flex items-center justify-center gap-2"
-                        >
+                        <Link href="/boundless" className="h-12 px-8 bg-orange-500 hover:bg-orange-600 text-white text-base font-semibold flex items-center justify-center gap-2">
                           Go to Dashboard
                           <ArrowRight className="w-4 h-4" />
-                        </Button>
+                        </Link>
                       );
                     })()}
                   </div>
@@ -124,7 +117,6 @@ export function Hero({ onConnectWallet, onViewDemo }: HeroProps) {
               }}
             </ConnectButton.Custom>
             <Button
-              onClick={onViewDemo}
               variant="outline"
               className="h-12 px-8 border-orange-500/50 text-orange-400 hover:bg-orange-500/10 text-base font-semibold bg-transparent"
             >

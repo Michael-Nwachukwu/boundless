@@ -5,7 +5,6 @@ import Link from "next/link"
 import { Wallet, LogOut, RefreshCw, ChevronDown, History, Settings as SettingsIcon, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Hero } from "@/components/landing/hero"
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { AssetTable } from "@/components/dashboard/asset-table"
 import { PullFlow } from "@/components/flows/pull-flow"
@@ -18,6 +17,57 @@ import { SqueezeFlow } from "@/components/flows/squeeze-flow"
 import { formatCurrency } from "@/lib/utils"
 import type { Balance } from "@/lib/types/defi"
 
+// Connect Wallet Modal Component
+function ConnectWalletModal() {
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl p-8 max-w-md w-full mx-4 text-center">
+        <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center mx-auto mb-6">
+          <Wallet className="w-8 h-8 text-white" />
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-3">Connect Your Wallet</h2>
+        <p className="text-neutral-400 mb-6">
+          Connect your wallet to view your unified balance across all chains and start managing your DeFi capital.
+        </p>
+        <div className="flex flex-col gap-3">
+          <ConnectButton.Custom>
+            {({
+              openConnectModal,
+              mounted,
+            }) => {
+              const ready = mounted;
+              return (
+                <div
+                  {...(!ready && {
+                    'aria-hidden': true,
+                    'style': {
+                      opacity: 0,
+                      pointerEvents: 'none',
+                      userSelect: 'none',
+                    },
+                  })}
+                >
+                  <Button
+                    onClick={openConnectModal}
+                    className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white text-base font-semibold"
+                  >
+                    Connect Wallet
+                  </Button>
+                </div>
+              );
+            }}
+          </ConnectButton.Custom>
+          <Link href="/">
+            <Button variant="ghost" className="w-full text-neutral-400 hover:text-white">
+              ← Back to Home
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function BoundlessApp() {
   const { connectedWallets, isConnecting, isConnected, primaryAddress, addWallet, removeWallet } =
     useWeb3Provider()
@@ -26,8 +76,8 @@ export default function BoundlessApp() {
   const { data: unifiedBalance, isLoading: isBalanceLoading, refetch: refetchBalance } = useUnifiedBalance(primaryAddress)
   const isGlobalLoading = isConnecting || isBalanceLoading
 
-  // Derived state for view
-  const showHero = !isConnected && connectedWallets.length === 0
+  // Check if we need to show the connect modal
+  const showConnectModal = !isConnecting && !isConnected
 
   const [activeTab, setActiveTab] = useState("overview")
   const [assetFilter, setAssetFilter] = useState<number | null>(null)
@@ -57,15 +107,6 @@ export default function BoundlessApp() {
     return selectedAssetsData.reduce((sum, asset) => sum + (asset.usdValue || 0), 0)
   }, [selectedAssetsData])
 
-  if (showHero) {
-    return (
-      <Hero
-        onConnectWallet={() => { /* Handled by ConnectButton inside Hero */ }}
-        onViewDemo={() => { /* Add demo logic later */ }}
-      />
-    )
-  }
-
   const allAssets = balanceToDisplay?.balances ?? []
   const filteredAssets = assetFilter
     ? allAssets.filter(asset => asset.usdValue < assetFilter)
@@ -82,6 +123,9 @@ export default function BoundlessApp() {
 
   return (
     <div className="flex flex-col h-screen bg-black text-white relative">
+      {/* Connect Wallet Modal - shown when not connected */}
+      {showConnectModal && <ConnectWalletModal />}
+
       {/* Header */}
       <header className="border-b border-neutral-700 bg-neutral-900/50 backdrop-blur-sm">
         <div className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto w-full">
